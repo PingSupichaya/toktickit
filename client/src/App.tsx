@@ -7,13 +7,18 @@ type UiState = "idle" | "loading" | "success" | "error";
 export default function App() {
   const [state, setState] = useState<UiState>("idle");
   const [categories, setCategories] = useState<Category[]>([]);
+  const [errorMessage, setErrorMessage] = useState("");
   void categories;
 
   async function handleCheck() {
-    // TODO(Issue 4): set loading, call checkSystem(), then either
-    //   - success: store categories and show Online + the list, or
-    //   - error: show Offline + a useful message.
     setState("loading");
+    try {
+      await checkSystem();
+      setState("success");
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : "Unknown error");
+      setState("error");
+    }
   }
 
   return (
@@ -26,7 +31,17 @@ export default function App() {
         {state === "loading" ? "Loading…" : "Check System"}
       </button>
 
-      {/* TODO(Issue 4): render loading / success (Online + categories) / error (Offline) states. */}
+      {state === "success" && (
+        <div>
+          Backend status: <span className="text-success">Online</span>
+        </div>
+      )}
+
+      {state === "error" && (
+        <div>
+          Backend status: <span className="text-danger">{errorMessage}</span>
+        </div>
+      )}
     </div>
   );
 }
