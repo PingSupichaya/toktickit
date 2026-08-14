@@ -8,12 +8,12 @@ export default function App() {
   const [state, setState] = useState<UiState>("idle");
   const [categories, setCategories] = useState<Category[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
-  void categories;
 
   async function handleCheck() {
     setState("loading");
     try {
-      await checkSystem();
+      const status = await checkSystem();
+      setCategories(status.categories);
       setState("success");
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Unknown error");
@@ -33,13 +33,27 @@ export default function App() {
 
       {state === "success" && (
         <div>
-          Backend status: <span className="text-success">Online</span>
+          <div>
+            System status: <span className="text-success">Online</span>
+          </div>
+          <br/><h5>Categories List</h5>
+          <div className="text-muted small mt-1">
+            Fetched {categories.length} {categories.length === 1 ? "category" : "categories"} from
+            the API.
+          </div>
+          <ul className="list-group mt-3">
+            {categories.map((category) => (
+              <li key={category.id} className="list-group-item">
+                {category.id}. {category.name}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
       {state === "error" && (
         <div>
-          Backend status: <span className="text-danger">{errorMessage}</span>
+          System status: <span className="text-danger">{errorMessage}</span>
         </div>
       )}
     </div>
