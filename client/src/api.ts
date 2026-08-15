@@ -21,5 +21,11 @@ export async function checkSystem(): Promise<SystemStatus> {
     throw new Error(`Health check failed with status ${healthRes.status}`);
   }
 
-  throw new Error("checkSystem not implemented yet");
+  const categoriesRes = await fetch(`${API_URL}/api/categories`);
+  if (!categoriesRes.ok) {
+    throw new Error(`Categories request failed with status ${categoriesRes.status}`);
+  }
+  const categories: Category[] = await categoriesRes.json();
+
+  return { online: true, categories };
 }
