@@ -1,5 +1,4 @@
 # Lab 1 — Test Plan and Evidence
-# Lab 1 — Test Plan and Evidence
 
 All test files live under server/tests/lab-01/ and client/tests/lab-01/.
 
