@@ -1,4 +1,4 @@
-# Lab 1 — AI Use and Reflection  (fill this in)
+# Lab 1 — AI Use and Reflection
 
 **LLM/agent used:** Claude Sonnet 5 High
 
@@ -16,6 +16,6 @@
 
 ## Reflection
 Two or three sentences: what made your prompts better, and one place you had to
-correct or reject what the agent produced.
-Agent code correctness depends on how I give the prompt details. I have to breif what agent needs to do sometimes I think because of comments in code make agent works more correctly because agent reads the file before edit. The prompts can be better by adding acceptance criteria.
+correct or reject what the agent produced.  
+Agent code correctness depends on how I give the prompt details. I have to breif what agent needs to do sometimes I think because of comments in code make agent works more correctly because agent reads the file before edit. The prompts can be better by adding acceptance criteria.  
 I need to review what agent wants to do in each step to ensure agent doesn't work out of scope or doesn't edit wrong code.
