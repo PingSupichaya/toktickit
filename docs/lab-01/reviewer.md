@@ -9,10 +9,10 @@ Noppawit Tanmanee — 67070501082 — GitHub: @FakeKase
 ## Pull Requests I authored (reviewed by my partner)
 | PR | Branch | Reviewer verdict |
 |----|--------|------------------|
-|    | feature/1-project-foundation | everything works fine for feature1 |
-|    | feature/2-health-check | readme is clear for setup and testing, everything follows the criteria. |
-|    | feature/3-category-seed | Everything meets the criteria and instructions was clear to setup. Make sure to resolve merge conflict before merge. |
-|    | feature/4-category-list | The codes test passed and meets all the criteria |
+|  https://github.com/PingSupichaya/toktickit/pull/7  | feature/1-project-foundation | everything works fine for feature1 |
+|  https://github.com/PingSupichaya/toktickit/pull/8  | feature/2-health-check | readme is clear for setup and testing, everything follows the criteria. |
+|  https://github.com/PingSupichaya/toktickit/pull/9  | feature/3-category-seed | Everything meets the criteria and instructions was clear to setup. Make sure to resolve merge conflict before merge. |
+|  https://github.com/PingSupichaya/toktickit/pull/10  | feature/4-category-list | The codes test passed and meets all the criteria |
 
 ### feature/1-project-foundation
 Reviewer comment I received:  
