@@ -13,20 +13,22 @@ app.get("/api/health", (_req: Request, res: Response) => {
   res.status(200).json({ status: "ok", service: "TokTickIT API" });
 });
 
-// ---------------------------------------------------------------------------
-// Issue 4 — Category list
-// GET /api/categories -> [{ id, name }, ...] ordered by id ascending.
-// ---------------------------------------------------------------------------
 app.get("/api/categories", async (_req: Request, res: Response) => {
   try {
     const categories = await getPrisma().category.findMany({
+      where: { isActive: true },
       select: { id: true, name: true },
       orderBy: { id: "asc" },
     });
-    res.status(200).json(categories);
+    res.status(200).json({ data: categories });
   } catch (err) {
     console.error("Failed to fetch categories:", err);
-    res.status(500).json({ error: "Failed to fetch categories" });
+    res.status(500).json({
+      error: {
+        message: "Failed to fetch categories",
+        code: "INTERNAL_SERVER_ERROR",
+      },
+    });
   }
 });
 
