@@ -65,6 +65,22 @@ describe("Seed data (T-022)", () => {
     });
   });
 
+  it("GET /api/related-systems returns only active related systems in id order", async () => {
+    const res = await request(app).get("/api/related-systems");
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      data: [
+        { id: 1, name: "Email" },
+        { id: 2, name: "Campus Wi-Fi" },
+        { id: 3, name: "VPN" },
+        { id: 4, name: "LEB2 App" },
+        { id: 5, name: "Grade Submission App" },
+        { id: 6, name: "Printer" },
+        { id: 7, name: "Corporate Laptop" },
+      ],
+    });
+  });
+
   it("is idempotent: re-running the seed does not duplicate records", async () => {
     const countsBefore = {
       categories: await prisma.category.count(),
