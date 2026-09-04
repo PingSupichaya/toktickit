@@ -45,11 +45,11 @@ async function main() {
   // 4 active requesters and 1 inactive requester
   
   const requesters = [
-    { name: "Alice Johnson",  email: "alice.john@mail.kmutt.com",  isActive: true  },
-    { name: "Bob Smith",      email: "bob.smit@mail.kmutt.com",      isActive: true  },
-    { name: "Carol Martinez", email: "carol.mart@mail.kmutt.com", isActive: true  },
-    { name: "David Lee",      email: "david.lee1@mail.kmutt.com",      isActive: true  },
-    { name: "Eve Turner",     email: "eve.turn@mail.kmutt.com",     isActive: false }, // inactive
+    { name: "Alice Johnson",  email: "alice.john@mail.kmutt.co.th",  isActive: true  },
+    { name: "Bob Smith",      email: "bob.smit@mail.kmutt.co.th",      isActive: true  },
+    { name: "Carol Martinez", email: "carol.mart@mail.kmutt.co.th", isActive: true  },
+    { name: "David Lee",      email: "david.lee1@mail.kmutt.co.th",      isActive: true  },
+    { name: "Eve Turner",     email: "eve.turn@mail.kmutt.co.th",     isActive: false }, // inactive
   ];
 
   await prisma.$transaction(
