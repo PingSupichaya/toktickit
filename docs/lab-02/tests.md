@@ -38,9 +38,9 @@ The table below is the authoritative test inventory. **Type** values: `Unit`, `A
 
 | Test ID | Type | Requirement / AC | What It Tests | Expected Result | Automated Test File | Status |
 |---------|------|-----------------|---------------|-----------------|---------------------|--------|
-| T-001 | API | AC-02 / BR-05 | `GET /api/requesters` returns only active requesters; inactive excluded | 200; active records only; inactive requester absent | `tests/lab-02/requesters.test.ts` | Pending |
+| T-001 | API | AC-02 / BR-05 | `GET /api/requesters` returns only active requesters (inactive excluded) and handles database errors with a 500 structured error | 200; active records only; inactive requester absent; 500 + `INTERNAL_SERVER_ERROR` on DB failure | `tests/lab-02/requesters.api.test.ts` | Pending |
 | T-002 | UI  | AC-02 | Requester selector populates, persists selection in localStorage, and shows name in header | Dropdown shows active requesters; header shows selected name after reload | `client/tests/lab-02/RequesterSelector.test.tsx` | Pending |
-| T-003 | UI  | AC-02 | Switching requester reloads ticket context for new requester | My Tickets reloads; previous requester's tickets not visible | `client/tests/lab-02/RequesterSelector.test.tsx` | Pending |
+| T-003 | UI  | AC-02 | Switching requester reloads ticket context for new requester; selection persisted/restored via localStorage | New requester shown; previous requester's context/tickets not visible | `client/tests/lab-02/RequesterSelector.test.tsx`, `client/tests/lab-02/RequesterContext.test.tsx` | Pending |
 | T-004 | API | AC-01 / BR-01,02,06 | `POST /api/tickets` with all valid fields | 201; unique `ticketNumber` matches `TKT-\d{6}`; `currentStatus=NEW`; `ticketDate` set by backend | `tests/lab-02/tickets.test.ts` | Pending |
 | T-005 | API | AC-04 / BR-09,10 | `POST /api/tickets` with summary < 10 chars and description > 2000 chars | 400; validation errors for both fields | `tests/lab-02/tickets.test.ts` | Pending |
 | T-006 | API | AC-04 / BR-09 | Summary with leading/trailing spaces is trimmed before validation | 201; stored summary is trimmed value | `tests/lab-02/tickets.test.ts` | Pending |
