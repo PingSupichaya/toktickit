@@ -26,7 +26,7 @@ export function RequesterSelector({ onSelected }: RequesterSelectorProps) {
       <div className="requester-select__card">
         <h1 className="requester-select__title">TokTickIT</h1>
         <p className="requester-select__subtitle">
-          Select a Requester (Development Mode)
+          Select a Requester
         </p>
 
         {loading && (
@@ -67,9 +67,9 @@ export function RequesterSelector({ onSelected }: RequesterSelectorProps) {
                 data-testid="requester-select"
                 placeholder="Choose a requester…"
                 value={selectedId}
-                onChange={(e) => setSelectedId(e.target.value)}
+                onChange={(v) => setSelectedId(v)}
                 options={requesters.map((r) => ({
-                  value: r.id,
+                  value: String(r.id),
                   label: `${r.name} (${r.email})`,
                 }))}
               />

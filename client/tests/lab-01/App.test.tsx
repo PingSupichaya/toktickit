@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import * as api from "../../src/api.js";
 import App from "../../src/App.js";
 
@@ -23,8 +24,12 @@ describe("App", () => {
   });
 
   it("shows the requester selector with active requesters on load", async () => {
+    const user = userEvent.setup();
     render(<App />);
-    expect(await screen.findByTestId("requester-select")).toBeInTheDocument();
+    const trigger = await screen.findByTestId("requester-select");
+    expect(trigger).toBeInTheDocument();
+    // Open the dropdown to reveal the active requester options.
+    await user.click(trigger);
     expect(screen.getByText("Alice Johnson (alice@example.com)")).toBeInTheDocument();
     expect(screen.getByText("Bob Smith (bob@example.com)")).toBeInTheDocument();
   });

@@ -19,23 +19,24 @@ beforeEach(() => {
 
 describe("RequesterSelector (T-002 / T-003)", () => {
   it("only shows active requesters in the dropdown", async () => {
+    const user = userEvent.setup();
     render(<App />);
-    const select = await screen.findByTestId("requester-select");
-    const options = Array.from(select.querySelectorAll("option")).map(
-      (o) => o.textContent
-    );
-    // Placeholder + the 3 active requesters.
-    expect(options).toContain("Alice Johnson (alice@example.com)");
-    expect(options).toContain("Bob Smith (bob@example.com)");
-    expect(options).toContain("Eve Turner (eve@example.com)");
+
+    const trigger = await screen.findByTestId("requester-select");
+    await user.click(trigger);
+
+    expect(screen.getByText("Alice Johnson (alice@example.com)")).toBeInTheDocument();
+    expect(screen.getByText("Bob Smith (bob@example.com)")).toBeInTheDocument();
+    expect(screen.getByText("Eve Turner (eve@example.com)")).toBeInTheDocument();
   });
 
   it("selecting a requester shows their name in the header and persists to localStorage", async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const select = await screen.findByTestId("requester-select");
-    await user.selectOptions(select, "1");
+    const trigger = await screen.findByTestId("requester-select");
+    await user.click(trigger);
+    await user.click(screen.getByText("Alice Johnson (alice@example.com)"));
     await user.click(screen.getByTestId("continue-btn"));
 
     // Header shows the selected requester's name.
