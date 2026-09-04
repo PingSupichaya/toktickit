@@ -1,707 +1,667 @@
 # Lab 2 UI Specification
 
-## Overview
-This specification defines the user interface design, Zen Green theme, reusable components, navigation, and responsive behavior for the Requester Ticketing System.
+---
 
-## Design Philosophy
+## 1. Design Philosophy
 
 ### Principles
-- **Clarity:** Information hierarchy is clear; important actions are prominent
-- **Efficiency:** Common tasks require minimal steps; forms are straightforward
-- **Feedback:** System state is always visible; actions provide immediate feedback
-- **Consistency:** Patterns repeat across screens; similar things look similar
-- **Accessibility:** Color is not the only indicator; text is readable; focus is visible
-- **Responsiveness:** Layouts adapt gracefully from desktop to mobile
+- **Clarity:** Information hierarchy is clear; important actions are prominent.
+- **Efficiency:** Common tasks require minimal steps; forms are straightforward.
+- **Feedback:** System state is always visible; every action produces immediate feedback.
+- **Consistency:** Patterns repeat across screens; similar things look similar.
+- **Accessibility:** Color is never the only indicator; text is readable; focus is always visible.
+- **Responsiveness:** Layouts adapt gracefully from mobile to desktop.
 
-## Zen Green Theme
+---
 
-### Color Palette
+## 2. Color Tokens
 
-#### Primary Colors
-- **Primary Green:** `#006B3C`
-  - Usage: App header background, primary action buttons, strong emphasis
-  - Text on primary: White `#FFFFFF`
-- **Secondary Green:** `#0B7A46`
-  - Usage: Active tabs, focus accents, links, hover states on primary actions
-  - Text on secondary: White `#FFFFFF`
-- **Pale Green:** `#EAF6EF`
-  - Usage: Selected items, success backgrounds, subtle section emphasis
-  - Text on pale green: Dark text
+All color values below are fixed for Lab 2. The coding agent must reference these tokens by name; do not introduce any unlisted color.
 
-#### Neutral Colors
-- **Page Background:** `#F5F7F6` (quiet near-white)
-- **Surface/Cards:** White `#FFFFFF` with subtle border `#E0E0E0` and shadow
-- **Text Primary:** `#1A3A2E` (dark charcoal-green, comfortable reading)
-- **Text Secondary:** `#5A6F65` (muted for labels and metadata)
-- **Border:** `#D1D9D6` (soft neutral)
-- **Disabled Text:** `#9AA5A0` (clearly disabled but readable)
+### Brand
 
-#### Form Colors
-- **Editable Field Background:** White `#FFFFFF`
-- **Editable Field Border:** `#C0C8C4` (neutral, clear)
-- **Editable Field Border (Focus):** `#0B7A46` (secondary green)
-- **Read-Only Field Background:** `#F9F9F7` (soft gray-green, warm ivory shading)
-- **Read-Only Field Border:** `#D1D9D6`
+| Token | Hex | Intended Use |
+|-------|-----|-------------|
+| `color-primary` | `#006B3C` | App header background, primary buttons, strong emphasis |
+| `color-primary-hover` | `#0B7A46` | Hover state of primary buttons, active nav links, focus rings |
+| `color-pale-green` | `#EAF6EF` | Selected items, success backgrounds, subtle section fill |
 
-#### Feedback Colors
-- **Error:** `#C41E3A` (dark red)
-  - Background: `#FDF0F2` (pale red)
-  - Border: `#C41E3A`
-  - Usage: Validation errors, critical messages
-- **Warning:** `#F59E0B` (amber)
-  - Background: `#FEF3C7` (pale yellow)
-  - Border: `#F59E0B`
-  - Usage: Warnings, cautions, non-critical alerts
-- **Success:** `#006B3C` (primary green)
-  - Background: `#EAF6EF` (pale green)
-  - Border: `#006B3C`
-  - Usage: Success confirmations, positive feedback
-- **Info:** `#2563EB` (blue)
-  - Background: `#EFF6FF` (pale blue)
-  - Border: `#2563EB`
-  - Usage: Informational messages, tips
+### Neutral
 
-### Typography
+| Token | Hex | Intended Use |
+|-------|-----|-------------|
+| `color-bg-page` | `#F5F7F6` | Page canvas |
+| `color-bg-surface` | `#FFFFFF` | Cards, modals, dropdowns |
+| `color-text-primary` | `#1A3A2E` | Body copy, headings |
+| `color-text-secondary` | `#5A6F65` | Labels, metadata, helper text |
+| `color-border` | `#D1D9D6` | Default borders |
+| `color-border-input` | `#C0C8C4` | Editable input borders |
+| `color-text-disabled` | `#9AA5A0` | Disabled text |
+| `color-bg-disabled` | `#F0F0F0` | Disabled button backgrounds |
 
-#### Font Family
-- **Primary:** System font stack for performance and native feel
-  ```css
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  ```
+### Form Field
 
-#### Font Sizes and Weights
-- **Heading 1 (Page Title):** 28px / 1.75rem, Bold (700)
-- **Heading 2 (Section Title):** 24px / 1.5rem, Semibold (600)
-- **Heading 3 (Subsection):** 20px / 1.25rem, Semibold (600)
-- **Body Text:** 16px / 1rem, Regular (400)
-- **Small Text (Metadata, Labels):** 14px / 0.875rem, Regular (400)
-- **Tiny Text (Hints, Captions):** 12px / 0.75rem, Regular (400)
-- **Button Text:** 16px / 1rem, Medium (500)
-- **Input Text:** 16px / 1rem, Regular (400)
+| Token | Hex | Intended Use |
+|-------|-----|-------------|
+| `color-bg-editable` | `#FFFFFF` | Editable input background |
+| `color-bg-readonly` | `#F9F9F7` | Read-only input background |
+| `color-border-focus` | `#0B7A46` | Input focus ring |
 
-#### Line Height
-- **Headings:** 1.2
-- **Body Text:** 1.6
-- **Labels and Small Text:** 1.4
+### Feedback
 
-### Spacing System
-Use consistent spacing based on 4px base unit:
+| Token | Hex | Intended Use |
+|-------|-----|-------------|
+| `color-error` | `#C41E3A` | Error text, error border, danger button background |
+| `color-error-bg` | `#FDF0F2` | Error alert background |
+| `color-error-hover` | `#A01828` | Danger button hover |
+| `color-warning` | `#F59E0B` | Warning text, amber badge |
+| `color-warning-bg` | `#FEF3C7` | Warning alert background |
+| `color-success` | `#006B3C` | Success text, success badge (`= color-primary`) |
+| `color-info` | `#2563EB` | Info alert border and icon |
+| `color-info-bg` | `#EFF6FF` | Info alert background |
 
-- **Space-1:** 4px
-- **Space-2:** 8px
-- **Space-3:** 12px
-- **Space-4:** 16px
-- **Space-5:** 20px
-- **Space-6:** 24px
-- **Space-8:** 32px
-- **Space-10:** 40px
-- **Space-12:** 48px
-- **Space-16:** 64px
+---
 
-### Elevation and Shadows
+## 3. Typography
 
-#### Card Shadow
+### Font Family
+
 ```css
-box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
+font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 ```
 
-#### Card Shadow (Hover)
-```css
-box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
-```
+### Scale
 
-#### Modal Shadow
+| Role | Size | Weight | Line Height |
+|------|------|--------|-------------|
+| Page title (H1) | 28px / 1.75rem | 700 Bold | 1.2 |
+| Section title (H2) | 24px / 1.5rem | 600 Semibold | 1.2 |
+| Subsection (H3) | 20px / 1.25rem | 600 Semibold | 1.2 |
+| Body | 16px / 1rem | 400 Regular | 1.6 |
+| Label / metadata | 14px / 0.875rem | 400 Regular | 1.4 |
+| Caption / hint | 12px / 0.75rem | 400 Regular | 1.4 |
+| Button | 16px / 1rem | 500 Medium | — |
+| Input | 16px / 1rem | 400 Regular | — |
+
+---
+
+## 4. Spacing System
+
+Base unit: 4 px.
+
+| Token | Value |
+|-------|-------|
+| `space-1` | 4px |
+| `space-2` | 8px |
+| `space-3` | 12px |
+| `space-4` | 16px |
+| `space-5` | 20px |
+| `space-6` | 24px |
+| `space-8` | 32px |
+| `space-10` | 40px |
+| `space-12` | 48px |
+| `space-16` | 64px |
+
+---
+
+## 5. Elevation and Border Radius
+
+### Shadows
+
 ```css
-box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2), 0 5px 10px rgba(0, 0, 0, 0.12);
+/* Card (default) */
+box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08);
+
+/* Card (hover/focus) */
+box-shadow: 0 4px 6px rgba(0,0,0,0.10), 0 2px 4px rgba(0,0,0,0.06);
+
+/* Modal */
+box-shadow: 0 10px 25px rgba(0,0,0,0.20), 0 5px 10px rgba(0,0,0,0.12);
 ```
 
 ### Border Radius
-- **Small (Buttons, Badges, Inputs):** 4px
-- **Medium (Cards, Dropdowns):** 8px
-- **Large (Modals, Panels):** 12px
 
-## Reusable Components
+| Usage | Value |
+|-------|-------|
+| Buttons, badges, inputs | 4px |
+| Cards, dropdowns | 8px |
+| Modals, panels | 12px |
 
-### Button Component
+---
 
-#### Primary Button
-- **Background:** `#006B3C` (primary green)
-- **Text:** White `#FFFFFF`, 16px, Medium (500)
-- **Padding:** 12px 24px
-- **Border Radius:** 4px
-- **Hover:** Background `#0B7A46` (secondary green)
-- **Focus:** Outline `#0B7A46` 2px with 2px offset
-- **Disabled:** Background `#C0C8C4`, text `#9AA5A0`, no hover, cursor not-allowed
+## 6. Button Hierarchy
 
-#### Secondary Button
-- **Background:** White `#FFFFFF`
-- **Text:** `#006B3C` (primary green), 16px, Medium (500)
-- **Border:** 1px solid `#006B3C`
-- **Padding:** 12px 24px
-- **Border Radius:** 4px
-- **Hover:** Background `#EAF6EF` (pale green)
-- **Focus:** Outline `#0B7A46` 2px with 2px offset
-- **Disabled:** Border `#C0C8C4`, text `#9AA5A0`, no hover, cursor not-allowed
+Every button state must be visually distinct. The coding agent must implement all six states.
 
-#### Danger Button (for destructive actions like remove attachment)
-- **Background:** `#C41E3A` (error red)
-- **Text:** White `#FFFFFF`, 16px, Medium (500)
-- **Padding:** 12px 24px
-- **Border Radius:** 4px
-- **Hover:** Background darker red `#A01828`
-- **Focus:** Outline `#C41E3A` 2px with 2px offset
+### 6.1 Primary Button
 
-#### Ghost/Text Button
-- **Background:** Transparent
-- **Text:** `#0B7A46` (secondary green), 16px, Medium (500)
-- **Padding:** 8px 16px
-- **Hover:** Background `#EAF6EF` (pale green)
-- **Focus:** Outline `#0B7A46` 2px with 2px offset
+| State | Background | Text | Border | Cursor |
+|-------|-----------|------|--------|--------|
+| Default | `#006B3C` | White | none | pointer |
+| Hover | `#0B7A46` | White | none | pointer |
+| Focus | `#006B3C` | White | 2px outline `#0B7A46`, 2px offset | pointer |
+| Disabled | `#C0C8C4` | `#9AA5A0` | none | not-allowed |
+| Busy (loading) | `#006B3C` | White | none | not-allowed |
 
-### Input Component
+**Busy state:** Replace button label with a 16 px inline spinner (white) + "Submitting…" text. The button is `disabled` and pointer-events are none. The form must also be fully disabled while the primary action button is busy.
 
-#### Text Input
-- **Background:** White `#FFFFFF`
-- **Border:** 1px solid `#C0C8C4`
-- **Border (Focus):** 2px solid `#0B7A46` (secondary green)
-- **Border Radius:** 4px
-- **Padding:** 12px 16px
-- **Font:** 16px, Regular (400)
-- **Placeholder:** `#9AA5A0`
-- **Disabled:** Background `#F9F9F7`, border `#D1D9D6`, text `#9AA5A0`
+### 6.2 Secondary Button
 
-#### Text Input (Read-Only)
-- **Background:** `#F9F9F7` (soft gray-green)
-- **Border:** 1px solid `#D1D9D6`
-- **Text:** `#5A6F65` (secondary text)
-- **Cursor:** default (not text)
+| State | Background | Text | Border | Cursor |
+|-------|-----------|------|--------|--------|
+| Default | White | `#006B3C` | 1px solid `#006B3C` | pointer |
+| Hover | `#EAF6EF` | `#006B3C` | 1px solid `#006B3C` | pointer |
+| Focus | White | `#006B3C` | 2px outline `#0B7A46`, 2px offset | pointer |
+| Disabled | White | `#9AA5A0` | 1px solid `#C0C8C4` | not-allowed |
 
-#### Text Input (Error State)
-- **Border:** 2px solid `#C41E3A` (error red)
-- **Background:** White
-- **Focus Border:** 2px solid `#C41E3A`
+### 6.3 Danger (Destructive) Button
 
-#### Error Message
-- **Text:** `#C41E3A` (error red), 14px
-- **Display:** Immediately below input field
-- **Icon:** Optional red exclamation icon
+| State | Background | Text | Border | Cursor |
+|-------|-----------|------|--------|--------|
+| Default | `#C41E3A` | White | none | pointer |
+| Hover | `#A01828` | White | none | pointer |
+| Focus | `#C41E3A` | White | 2px outline `#C41E3A`, 2px offset | pointer |
+| Disabled | `#C0C8C4` | `#9AA5A0` | none | not-allowed |
 
-#### Character Counter
-- **Text:** `#5A6F65` (secondary text), 12px
-- **Position:** Bottom right of text area or input
-- **Format:** "45 / 200 characters"
-- **Color (near limit):** `#F59E0B` (warning amber) when 90%+ used
-- **Color (over limit):** `#C41E3A` (error red) when over limit
+### 6.4 Ghost / Tertiary Button
 
-### Textarea Component
-Same as Text Input, but:
-- **Min Height:** 120px
-- **Resize:** Vertical only
-- **Character counter:** Always visible
+| State | Background | Text | Border | Cursor |
+|-------|-----------|------|--------|--------|
+| Default | Transparent | `#0B7A46` | none | pointer |
+| Hover | `#EAF6EF` | `#0B7A46` | none | pointer |
+| Focus | Transparent | `#0B7A46` | 2px outline `#0B7A46`, 2px offset | pointer |
 
-### Select/Dropdown Component
-- **Appearance:** Same as Text Input
-- **Dropdown Icon:** Chevron-down, `#5A6F65`, right-aligned
-- **Dropdown Menu:**
-  - Background: White
-  - Border: 1px solid `#C0C8C4`
-  - Shadow: Card shadow
-  - Border Radius: 4px
-- **Dropdown Item:**
-  - Padding: 12px 16px
-  - Hover: Background `#EAF6EF` (pale green)
-  - Selected: Background `#EAF6EF`, checkmark icon
-  - Font: 16px, Regular
+**Sizing:** Primary and Secondary — padding 12px 24px. Ghost — padding 8px 16px. All — border-radius 4px.
 
-### Radio Button / Checkbox Component
-- **Size:** 20px × 20px
-- **Border:** 2px solid `#C0C8C4`
-- **Border (Checked):** 2px solid `#006B3C` (primary green)
-- **Fill (Checked):** `#006B3C` (primary green)
-- **Focus:** Outline `#0B7A46` 2px with 2px offset
-- **Label:** 16px, Regular, `#1A3A2E`, margin-left 8px
+### Automated Assertion Targets for Buttons
 
-### Badge Component
+- Primary submit button has `data-testid="submit-btn"` and `disabled` attribute when form is invalid or submitting.
+- Busy state button has `data-testid="submit-btn-busy"` and `aria-busy="true"`.
+- Danger remove button has `data-testid="remove-attachment-btn"`.
+- Cancel / secondary buttons have `data-testid="cancel-btn"`.
 
-#### Status Badge (NEW)
-- **NEW:** Background `#EAF6EF` (pale green), text `#006B3C` (primary green)
-- **Font:** 12px, Medium (500), uppercase
-- **Padding:** 4px 8px
-- **Border Radius:** 4px
-- **Optional:** Small colored dot indicator
+---
 
-#### Priority Badge
-- **LOW:** Background `#F0F0F0` (light gray), text `#5A6F65`
-- **MEDIUM:** Background `#FEF3C7` (pale yellow), text `#92400E` (dark amber)
-- **HIGH:** Background `#FDF0F2` (pale red), text `#C41E3A` (error red)
-- **Font:** 12px, Medium (500), uppercase
-- **Padding:** 4px 8px
-- **Border Radius:** 4px
+## 7. Form Controls
 
-### Card Component
-- **Background:** White `#FFFFFF`
-- **Border:** 1px solid `#E0E0E0`
-- **Border Radius:** 8px
-- **Shadow:** Card shadow
-- **Padding:** 24px
-- **Hover (if clickable):** Card shadow (hover), border `#0B7A46`
+### 7.1 Text Input States
 
-### Loading Component
+| State | Background | Border | Text |
+|-------|-----------|--------|------|
+| Default (editable) | `#FFFFFF` | 1px solid `#C0C8C4` | `#1A3A2E` |
+| Focus | `#FFFFFF` | 2px solid `#0B7A46` | `#1A3A2E` |
+| Read-only | `#F9F9F7` | 1px solid `#D1D9D6` | `#5A6F65`; cursor: default |
+| Invalid | `#FFFFFF` | 2px solid `#C41E3A` | `#1A3A2E` |
+| Disabled | `#F9F9F7` | 1px solid `#D1D9D6` | `#9AA5A0`; cursor: not-allowed |
 
-#### Spinner
-- **Size:** 40px × 40px (default), smaller variants available
-- **Color:** `#0B7A46` (secondary green)
-- **Animation:** Smooth rotation
-- **Usage:** Centered in container with optional "Loading..." text below
+All inputs: padding 12px 16px; border-radius 4px; font 16px Regular.  
+Placeholder text: `#9AA5A0`.
 
-#### Skeleton Loading
-- **Background:** `#E0E0E0` animated shimmer to `#F0F0F0`
-- **Usage:** Placeholder for content while loading (ticket cards, list items)
+### 7.2 Textarea
 
-### Empty State Component
-- **Icon:** Relevant illustration or icon in `#C0C8C4` (muted)
-- **Heading:** 20px, Semibold, `#1A3A2E`
-- **Message:** 16px, Regular, `#5A6F65`
-- **Action Button:** Primary button for main action (e.g., "Create Your First Ticket")
-- **Padding:** 64px vertical, centered
+Same as Text Input with min-height 120px; resize: vertical only. Character counter always visible.
 
-### Error State Component
-- **Icon:** Error icon in `#C41E3A` (error red)
-- **Heading:** 20px, Semibold, `#1A3A2E`
-- **Message:** 16px, Regular, `#5A6F65`, safe error description
-- **Action Button:** Primary button "Retry" or secondary button "Go Back"
-- **Padding:** 64px vertical, centered
+### 7.3 Select / Dropdown
 
-### Banner/Alert Component
-- **Success Alert:**
-  - Background: `#EAF6EF` (pale green)
-  - Border-left: 4px solid `#006B3C` (primary green)
-  - Icon: Checkmark in `#006B3C`
-  - Text: `#1A3A2E`
-- **Error Alert:**
-  - Background: `#FDF0F2` (pale red)
-  - Border-left: 4px solid `#C41E3A` (error red)
-  - Icon: Exclamation in `#C41E3A`
-  - Text: `#1A3A2E`
-- **Warning Alert:**
-  - Background: `#FEF3C7` (pale yellow)
-  - Border-left: 4px solid `#F59E0B` (amber)
-  - Icon: Warning triangle in `#F59E0B`
-  - Text: `#1A3A2E`
-- **Info Alert:**
-  - Background: `#EFF6FF` (pale blue)
-  - Border-left: 4px solid `#2563EB` (blue)
-  - Icon: Info circle in `#2563EB`
-  - Text: `#1A3A2E`
-- **Padding:** 16px
-- **Border Radius:** 4px
-- **Dismissible:** Optional close button in top-right
+Same appearance as Text Input. Chevron-down icon (`#5A6F65`) right-aligned. Dropdown menu: white background, 1px solid `#C0C8C4` border, card shadow, 4px border-radius. Item padding 12px 16px; hover background `#EAF6EF`; selected item shows checkmark + `#EAF6EF` background.
 
-### File Upload Component
-- **Drag-and-Drop Zone:**
-  - Border: 2px dashed `#C0C8C4`
-  - Border (hover/dragover): 2px dashed `#0B7A46` (secondary green)
-  - Background: `#F9F9F7`
-  - Background (hover/dragover): `#EAF6EF` (pale green)
-  - Padding: 32px
-  - Border Radius: 8px
-  - Icon: Upload icon `#5A6F65`
-  - Text: "Drag files here or click to browse"
-  - Allowed types displayed: "JPG, PNG, WEBP, PDF (max 5MB)"
-- **File List Item:**
-  - Filename, file size, content type icon
-  - Remove button (small ghost/danger button)
-  - Progress bar during upload
-  - Success checkmark when complete
-  - Error indicator if upload fails
+### 7.4 Radio Buttons (Priority)
 
-### Pagination Component
-- **Container:** Flex row, centered, spacing 8px
-- **Page Button:**
-  - Size: 40px × 40px
-  - Border: 1px solid `#C0C8C4`
-  - Background: White
-  - Text: `#5A6F65`, 14px
-  - Hover: Background `#EAF6EF`, border `#0B7A46`
-  - Active: Background `#006B3C`, text White, no border
-  - Disabled: Background `#F0F0F0`, text `#9AA5A0`, no hover
-- **Previous/Next Buttons:** Text buttons with arrow icons
-- **Page Size Selector:** Dropdown, right-aligned
+Size 20 × 20px. Default border: 2px solid `#C0C8C4`. Checked border + fill: `#006B3C`. Focus: 2px outline `#0B7A46`, 2px offset. Label: 16px Regular `#1A3A2E`, margin-left 8px. Horizontal on desktop; vertical on mobile.
 
-### Modal/Dialog Component
-- **Overlay:** Semi-transparent black `rgba(0, 0, 0, 0.5)`, covers full viewport
-- **Modal Container:**
-  - Background: White
-  - Border Radius: 12px
-  - Shadow: Modal shadow
-  - Max Width: 600px (default), larger for complex forms
-  - Padding: 32px
-  - Centered vertically and horizontally
-- **Header:**
-  - Title: 24px, Semibold
-  - Close button: Top-right, ghost button with X icon
-- **Body:** Scrollable if content overflows
-- **Footer:**
-  - Flex row, right-aligned
-  - Primary and secondary action buttons
-  - Spacing: 16px between buttons
+### 7.5 Required-Field Marker
 
-## Application Navigation
+- Required fields are marked with a red asterisk `*` immediately after the label text: e.g. **Category \***.
+- Asterisk color: `#C41E3A`.
+- All asterisks must be accompanied by a legend or `aria-required="true"` on the input.
+- Automated check: every required field `<input>` / `<select>` / `<textarea>` must have `aria-required="true"` and its label must contain `*`.
+
+### 7.6 Validation Message Placement
+
+- Error message appears **immediately below the field** (not in a tooltip, not at the top of the form alone).
+- Font: 14px Regular `#C41E3A`.
+- Optional leading exclamation icon (same color).
+- `role="alert"` or `aria-live="polite"` so screen readers announce the error.
+- Automated check: error message element has `data-testid="error-{fieldName}"`.
+
+### 7.7 Character Counter
+
+- Position: bottom-right of input or textarea.
+- Format: `"45 / 200 characters"`.
+- Default color: `#5A6F65`.
+- Near limit (≥ 90 % used): `#F59E0B` (amber).
+- Over limit: `#C41E3A` (red).
+- Automated check: element has `data-testid="counter-{fieldName}"`.
+
+---
+
+## 8. Badge Rules
+
+### Status Badge (Current Status)
+
+| Value | Background | Text | Additional |
+|-------|-----------|------|------------|
+| NEW | `#EAF6EF` | `#006B3C` | — |
+
+Font: 12px Medium (500), uppercase. Padding: 4px 8px. Border-radius: 4px.  
+Non-color indicator: label text is always uppercase ("NEW"). Screen reader reads the text.
+
+### Requested Priority Badge
+
+| Value | Background | Text |
+|-------|-----------|------|
+| LOW | `#F0F0F0` | `#5A6F65` |
+| MEDIUM | `#FEF3C7` | `#92400E` |
+| HIGH | `#FDF0F2` | `#C41E3A` |
+
+Font: 12px Medium (500), uppercase. Padding: 4px 8px. Border-radius: 4px.  
+Non-color indicator: the text value itself ("LOW", "MEDIUM", "HIGH") distinguishes priority without relying on color.
+
+### Automated Assertion Targets for Badges
+
+- Status badge: `data-testid="status-badge"` with `data-value="NEW"`.
+- Priority badge: `data-testid="priority-badge"` with `data-value="LOW|MEDIUM|HIGH"`.
+
+---
+
+## 9. Attachment States
+
+Each attachment row in the Ticket Detail Attachments card must render one of the following five states.
+
+| State | Visual Treatment | Download | Preview | Remove |
+|-------|-----------------|---------|---------|--------|
+| **Active** | Normal row; filename is a clickable download link | ✅ Enabled | ✅ Enabled | ✅ Enabled (ghost danger button) |
+| **Uploading** | Row shows filename + progress bar (green fill); "Cancel" ghost button | ❌ | ❌ | ❌ |
+| **Upload Failed** | Row shows filename + red error text "Upload failed. Try again."; "Retry" ghost button + "Remove" ghost | ❌ | ❌ | ✅ (removes pending row) |
+| **Removed** | Row rendered in muted style (`color-text-disabled`); "Removed" badge (gray, `#9AA5A0` text on `#F0F0F0`); removal date and reason shown below filename; **Download and Preview actions are disabled and hidden** | ❌ | ❌ | ❌ |
+| **Unavailable** (file missing from storage) | Row shows filename + amber warning badge "Unavailable"; Download disabled | ❌ | ❌ | ✅ |
+
+**Removed attachment display rules (mandatory):**
+- Soft-removed attachments are **always shown** on the Ticket Detail screen as read-only metadata rows. They are never hidden.
+- The row must include: original filename (plain text, not a link), file size, upload date, "Removed" badge, removal date, and removal reason (if provided).
+- Download link and Preview button must be absent or have `disabled` attribute and `aria-disabled="true"`.
+- Muted row background: `#F9F9F7`; text color: `#9AA5A0`.
+- Automated check: removed row has `data-testid="attachment-removed-{id}"` and no `<a>` download link.
+
+**Upload zone:**
+- Shown only when active attachment count < 5.
+- Hidden (or replaced by "Maximum attachments reached" message) when count = 5.
+- Drag-and-drop zone: 2px dashed `#C0C8C4` border; background `#F9F9F7`; hover/dragover: 2px dashed `#0B7A46`, background `#EAF6EF`; padding 32px; border-radius 8px.
+- Allowed types label: "JPG, PNG, WEBP, PDF (max 5 MB)".
+
+---
+
+## 10. Form Lifecycle States
+
+The Create Ticket form must correctly implement all six states below. The coding agent must handle each; tests must assert the correct state.
+
+| State | UI Behaviour |
+|-------|-------------|
+| **Initial** | All required fields empty; submit button disabled; no error messages visible |
+| **Loading (reference data)** | Category and Related System dropdowns show skeleton/spinner while fetching; submit button disabled |
+| **Validation (client-side)** | On blur, invalid fields show red border + inline error message below field; submit button remains disabled until all required fields are valid |
+| **Submitting** | Submit button enters Busy state (inline spinner + "Submitting…"); entire form is disabled; no second submission possible |
+| **Success** | Success alert banner appears at top: "Ticket TKT-XXXXXX created successfully." Navigate to Ticket Detail after 1–2 s or on user dismiss |
+| **Failure (server error)** | Error alert banner at top with safe message; form re-enabled; all user-entered data preserved; retry possible |
+
+---
+
+## 11. Application Shell and Navigation
 
 ### App Header
 
-**Desktop (>= 768px):**
-- **Height:** 64px
-- **Background:** `#006B3C` (primary green)
-- **Layout:** Flex row, space-between, aligned center
-- **Left Section:**
-  - TokTickIT logo/text: White, 20px, Bold
-  - Navigation links: White, 16px, Medium, margin-left 32px each
-    - "My Tickets"
-    - "Create Ticket"
-  - **Active Page Indication:** Underline with `#EAF6EF`, 3px, 4px below text
-  - **Hover:** Underline appears
-- **Right Section:**
-  - Development Requester display: White, 14px, flex column, align-end
-    - "Logged in as: [Name]"
-    - Email in smaller, slightly transparent text
-  - "Switch Requester" button: Secondary style adapted for dark background (white border, white text, hover pale green background)
-- **Padding:** 0 24px
+**Desktop (≥ 768 px):**
+- Height: 64px; background `#006B3C`.
+- Left: "TokTickIT" logotype (white, 20px Bold) + nav links "My Tickets" and "Create Ticket" (white, 16px Medium, margin-left 32px each).
+- Active page indicator: 3px underline `#EAF6EF`, 4px below text. Inactive hover: underline appears.
+- Right: Requester display (white, 14px, flex column, align-end) — "Logged in as: [Name]" / email — plus "Switch Requester" ghost button (white border, white text, hover pale-green background).
+- Padding: 0 24px.
 
-**Mobile (< 768px):**
-- **Height:** 56px
-- **Background:** `#006B3C` (primary green)
-- **Layout:**
-  - Top row: Logo/text (white), hamburger menu button (white icon, right-aligned)
-  - When menu open: Full-screen overlay with navigation links stacked vertically
-- **Mobile Menu:**
-  - Background: `#006B3C`
-  - Links: White, 20px, padding 16px, full-width, tap highlight
-  - Active: Background `#0B7A46`
-  - Close button: Top-right, X icon
-  - Requester info at bottom: Name, email, "Switch Requester" button
+**Mobile (< 768 px):**
+- Height: 56px; background `#006B3C`.
+- Logo left; hamburger icon right (white, 44 × 44px tap target).
+- Tapping hamburger opens full-screen overlay (background `#006B3C`); nav links stacked, 20px, padding 16px, full-width; active link background `#0B7A46`; close ✕ top-right; requester info + "Switch Requester" at bottom.
 
-### Development Mode Indicator
-- **Position:** Below app header (or top of page if header is sticky)
-- **Background:** `#FEF3C7` (pale yellow/warning)
-- **Text:** `#92400E` (dark amber), 14px
-- **Content:** "⚠️ DEVELOPMENT MODE - Not Real Authentication"
-- **Padding:** 8px 24px
-- **Border-bottom:** 1px solid `#F59E0B`
+### Development Mode Banner
+- Below header; background `#FEF3C7`; text `#92400E`, 14px; content "⚠️ DEVELOPMENT MODE — Not Real Authentication"; padding 8px 24px; border-bottom 1px solid `#F59E0B`.
 
-### Breadcrumb (Optional for Detail Screens)
-- **Position:** Below header, above page title
-- **Text:** `#5A6F65`, 14px
-- **Separator:** "/" or chevron-right, `#9AA5A0`
-- **Links:** `#0B7A46` (secondary green), underline on hover
-- **Current Page:** `#1A3A2E`, no link
+### Breadcrumb (Ticket Detail only)
+- Below header, above page title; 14px `#5A6F65`; separator "/"; link color `#0B7A46`, underline on hover; current page `#1A3A2E`, no link.
 
-## Screen Layouts
+---
 
-### 1. Requester Selection Screen
+## 12. Screen Layouts
 
-**Purpose:** Development testing mechanism to select which requester is "logged in."
+### 12.1 Requester Selection Screen
 
-**Layout (Centered Card):**
-- **Container:** Centered vertically and horizontally on page background `#F5F7F6`
-- **Card:** White, 400px max-width, padding 32px, border-radius 12px, card shadow
-- **Logo/Title:** "TokTickIT" in `#006B3C`, 28px, Bold, centered, margin-bottom 16px
-- **Subtitle:** "Select a Requester (Development Mode)", 16px, `#5A6F65`, centered, margin-bottom 24px
-- **Development Warning:** Info alert box with text: "This is a testing mechanism, not real authentication"
-- **Requester Dropdown:**
-  - Label: "Select Requester", 14px, `#5A6F65`
-  - Select component with list of active requesters
-  - Display format: "Name (email)"
-  - Margin-bottom 24px
-- **Submit Button:** Primary button "Continue", full-width
-- **Loading State:** Spinner if requesters are loading
-- **Error State:** Error alert if loading fails, "Retry" button
+Centered card on `#F5F7F6`. Card: white, max-width 400px, padding 32px, border-radius 12px, card shadow.
 
-### 2. Create Ticket Screen
+- "TokTickIT" title: `#006B3C`, 28px Bold, centered.
+- Subtitle: "Select a Requester (Development Mode)", 16px `#5A6F65`, centered.
+- Info alert: "This is a testing mechanism, not real authentication."
+- Dropdown label "Select Requester"; display format "Name (email)".
+- Primary "Continue" button, full-width.
+- **Loading state:** Spinner centered inside card.
+- **Error state:** Error alert + "Retry" secondary button.
 
-**Layout (Single Column, Max Width 800px):**
-- **Page Title:** "Create Ticket", H1, margin-bottom 32px
-- **Form Card:** White card, padding 32px
-- **Form Fields (stacked vertically, spacing 24px):**
-  1. **Requester (Read-Only):**
-     - Label: "Requester"
-     - Read-only input with selected requester name and email
-  2. **Category (Required):**
-     - Label: "Category *"
-     - Select dropdown with active categories
-     - Error message space below
-  3. **Related System (Required):**
-     - Label: "Related System *"
-     - Select dropdown with active related systems
-     - Error message space below
-  4. **Summary (Required):**
-     - Label: "Summary *"
-     - Text input, max 200 characters
-     - Character counter below
-     - Error message space below
-  5. **Description (Required):**
-     - Label: "Description *"
-     - Textarea, min 20, max 2000 characters
-     - Character counter below
-     - Error message space below
-  6. **Requested Priority (Required):**
-     - Label: "Requested Priority *"
-     - Radio buttons for LOW, MEDIUM, HIGH (horizontal on desktop, vertical on mobile)
-     - Error message space below
-  7. **Attachments (Optional):**
-     - Label: "Attachments (Optional, max 5)"
-     - File upload component (drag-and-drop zone)
-     - List of selected files below with remove option
-     - Allowed types and max size displayed
-- **Form Actions:**
-  - Primary button "Submit Ticket"
-  - Secondary button "Cancel" (returns to My Tickets or clears form with confirmation)
-  - Spacing 16px between buttons
-  - Align left on desktop, stacked full-width on mobile
-- **Loading State:** Disable form and show spinner overlay during submission
-- **Success State:** Navigate to Ticket Detail or show success banner and clear form
-- **Error State:** Show error banner at top of form, preserve data, enable retry
+### 12.2 Create Ticket Screen
 
-### 3. My Tickets Screen
+Single column, max-width 800px, centered on page.
 
-**Layout (Full Width with Max 1200px):**
-- **Page Title:** "My Tickets", H1, margin-bottom 24px
-- **Action Bar (Flex Row, space-between):**
-  - Left: Search input (300px on desktop)
-  - Right: Primary button "Create Ticket"
-- **Filter and Sort Bar (Flex Row, wrap):**
-  - Filter dropdowns: Category, Related System, Status, Priority
-  - Sort dropdown: "Sort by Ticket Date (Newest)" or "Ticket Number"
-  - "Clear Filters" text button (appears when filters active)
-  - Spacing: 16px between elements
-- **Ticket Count:** "Showing X of Y tickets", 14px, `#5A6F65`, margin-bottom 16px
-- **Ticket List:**
-  - Stacked cards, spacing 16px
-  - Each ticket card (clickable):
-    - **Layout:** Flex row (desktop), column (mobile)
-    - **Left Section:**
-      - Ticket Number: 18px, Semibold, `#1A3A2E`
-      - Summary: 16px, Regular, `#1A3A2E`, truncate if too long
-      - Metadata row (flex, spacing 16px):
-        - Category badge
-        - Related System (text with icon)
-        - Requested Priority badge
-        - Ticket Date (formatted)
-        - Attachment count (if > 0): "📎 X attachments"
-    - **Right Section:**
-      - Status badge (NEW)
-    - **Hover:** Card shadow (hover), border `#0B7A46`
-- **Empty State:** When no tickets exist or no search results
-  - Empty state component
-  - Message: "No tickets found" or "You haven't created any tickets yet"
-  - Primary button "Create Your First Ticket"
-- **Pagination:** Pagination component at bottom, margin-top 32px
-- **Loading State:** Skeleton loading for ticket cards
+**Form fields (stacked, gap `space-6`):**
 
-### 4. Ticket Detail Screen
+| # | Field | Type | Required | Notes |
+|---|-------|------|----------|-------|
+| 1 | Requester | Read-only input | — | Shows selected requester name + email |
+| 2 | Category | Select | ✱ | Active categories from API |
+| 3 | Related System | Select | ✱ | Active related systems from API |
+| 4 | Summary | Text input | ✱ | 10–200 chars; character counter |
+| 5 | Description | Textarea | ✱ | 20–2000 chars; character counter |
+| 6 | Requested Priority | Radio group | ✱ | LOW / MEDIUM / HIGH |
+| 7 | Attachments | File upload zone | Optional | Max 5; JPG, PNG, WEBP, PDF; max 5 MB each |
 
-**Layout (Single Column, Max Width 900px):**
-- **Breadcrumb:** "My Tickets / TKT-000042"
-- **Page Title:**
-  - Ticket Number (H1) + Status Badge
-- **Ticket Information Card:** White card, padding 32px, margin-bottom 24px
-  - **Section: Ticket Details**
-    - Grid layout (2 columns on desktop, 1 on mobile)
-    - Read-only fields:
-      - Ticket Number
-      - Ticket Date (formatted)
-      - Requester (name and email)
-      - Category
-      - Related System
-      - Requested Priority (badge)
-      - Current Status (badge)
-  - **Section: Description**
-    - Summary: 18px, Semibold, margin-bottom 8px
-    - Description: 16px, Regular, preserve line breaks
-- **Attachments Card:** White card, padding 32px
-  - **Section Title:** "Attachments (X active)"
-  - **Attachment List:**
-    - Each attachment (not removed):
-      - Flex row, align-center, spacing 16px
-      - File icon (based on type)
-      - Filename (clickable link to download)
-      - File size
-      - Uploaded date
-      - Actions: "Download" button (ghost), "Remove" button (ghost danger)
-    - When 5 active attachments: Display message "Maximum attachments reached"
-  - **Upload Section (if < 5 active):**
-    - File upload component
-    - Upload button (primary small)
-  - **Empty State:** "No attachments" message if none
-  - **Removed Attachments (optional view):** Show removed attachments in muted styling with removed date and reason
-- **Loading State:** Skeleton loading for ticket details
-- **Error State:** Error state component if ticket not found or ownership check fails
-- **Ownership Failure:** Error message "You do not have permission to view this ticket" with button to return to My Tickets
+Required fields are marked ✱ in the label (see Section 7.5).
 
-### 5. Switch Requester Dialog
+**Form actions (desktop: left-aligned row; mobile: stacked full-width):**
+- Primary "Submit Ticket" (`data-testid="submit-btn"`)
+- Secondary "Cancel" (`data-testid="cancel-btn"`)
 
-**Modal Dialog:**
-- **Title:** "Switch Requester"
-- **Requester Dropdown:** Select component with active requesters
-- **Actions:**
-  - Primary button "Switch"
-  - Secondary button "Cancel"
-- **Loading:** Disable form during switch, show spinner
+**State transitions:** see Section 10.
 
-## Responsive Behavior
+### 12.3 My Tickets Screen
+
+Full width, max-width 1200px.
+
+**Controls row 1 (flex, space-between):**
+- Left: Search input (min 240px, max 360px on desktop); `data-testid="search-input"`; debounce 300ms; placeholder "Search tickets…".
+- Right: Primary "Create Ticket" button.
+
+**Controls row 2 (flex, wrap, gap `space-4`):**
+- Filter dropdowns: Category (`data-testid="filter-category"`), Related System, Status, Priority.
+- Sort dropdown: `data-testid="sort-control"`.
+- "Clear Filters" ghost button (visible only when any filter or search is active); `data-testid="clear-filters-btn"`.
+
+**Ticket count line:** "Showing X of Y tickets" — 14px `#5A6F65`.
+
+**Ticket list:**
+Each card is clickable and navigates to Ticket Detail.
+- Desktop / tablet: flex row — left section (number + summary + metadata) and right section (status badge).
+- Mobile: stacked column; metadata items wrap.
+- Ticket Number: 18px Semibold `#1A3A2E`; `data-testid="ticket-number"`.
+- Summary: 16px Regular, single-line truncate with ellipsis.
+- Metadata row: Category badge, Related System text, Priority badge, date, attachment count ("📎 N").
+- Card hover: shadow upgrade + border `#0B7A46`.
+
+**Empty states:**
+
+| Condition | Heading | Message | Action |
+|-----------|---------|---------|--------|
+| No tickets at all | "No Tickets Yet" | "You haven't created any tickets." | Primary "Create Your First Ticket" |
+| Search / filter returns nothing | "No Results" | "No tickets match your search or filters." | Ghost "Clear Filters" |
+
+Both must use the EmptyState component; `data-testid="empty-state"`.
+
+**Pagination:** bottom, margin-top `space-8`; `data-testid="pagination"`. Page size selector right-aligned.
+
+**Loading state:** Skeleton cards (shimmer) fill the list area.
+
+### 12.4 Ticket Detail Screen
+
+Single column, max-width 900px.
+
+**Ticket Information Card (white card, padding 32px):**
+- 2-column grid (desktop), 1-column (mobile) for read-only fields:
+  - Ticket Number, Ticket Date, Requester, Category, Related System, Requested Priority (badge), Current Status (badge).
+- Below grid: Summary (18px Semibold) and Description (16px Regular, preserve line-breaks).
+
+**Attachments Card (white card, padding 32px):**
+- Section title: "Attachments (N active)" — `data-testid="attachment-count"`.
+- Attachment rows: see Section 9 for all five states.
+- **Soft-removed rows are always rendered** — never hidden. They appear below active rows in muted styling with "Removed" badge, removal date, and reason. Download and Preview are absent / `disabled` + `aria-disabled="true"`.
+- Upload zone: shown when active count < 5. Hidden / replaced by "Maximum attachments reached" when count = 5.
+- Empty state: "No attachments yet" when the ticket has no attachments at all.
+
+**States:**
+- Loading: skeleton for both cards.
+- Ownership failure (403): ErrorState component with "You do not have permission to view this ticket." + Secondary "Back to My Tickets" button.
+- Not found (404): ErrorState with "Ticket not found." + Secondary "Back to My Tickets".
+
+### 12.5 Switch Requester Dialog
+
+Modal (max-width 480px):
+- Title "Switch Requester"; requester dropdown; Primary "Switch" + Secondary "Cancel"; spinner overlay during switch.
+
+---
+
+## 13. Responsive Behavior
 
 ### Breakpoints
-- **Mobile:** < 768px
-- **Tablet:** 768px - 1024px
-- **Desktop:** >= 1024px
 
-### Responsive Adaptations
+| Name | Width |
+|------|-------|
+| Mobile | < 768px |
+| Tablet | 768px – 1023px |
+| Desktop | ≥ 1024px |
 
-#### Navigation
-- **Desktop:** Horizontal navigation in header
-- **Mobile:** Hamburger menu with full-screen overlay
+### Adaptation Rules
 
-#### Form Layouts
-- **Desktop:** Labels left-aligned, inputs full-width within form container
-- **Tablet:** Same as desktop
-- **Mobile:** Full-width inputs, stacked vertically, increased touch targets (min 44px height)
-
-#### Ticket List
-- **Desktop:** Multi-column layout within cards, compact metadata
-- **Tablet:** Same as desktop, slightly reduced spacing
-- **Mobile:** Single-column cards, stacked metadata, larger touch targets
-
-#### Ticket Detail
-- **Desktop:** 2-column grid for read-only fields
-- **Tablet:** 2-column grid with reduced spacing
-- **Mobile:** Single-column layout, full-width fields
-
-#### Filter and Sort
-- **Desktop:** Horizontal row, all visible
-- **Tablet:** Wrap to multiple rows if needed
-- **Mobile:** Collapse to expandable filter panel or stacked layout
-
-#### Buttons
-- **Desktop:** Inline with appropriate widths
-- **Mobile:** Full-width for primary actions, stacked vertically
-
-#### Modals
-- **Desktop:** Centered, max-width 600px
-- **Mobile:** Full-screen or near full-screen with small margin
+| Element | Desktop | Tablet | Mobile |
+|---------|---------|--------|--------|
+| Navigation | Horizontal in header | Horizontal in header | Hamburger overlay |
+| Create Ticket form | Labels + full-width inputs in single column | Same as desktop | Full-width; touch targets ≥ 44px |
+| Priority radio group | Horizontal | Horizontal | Vertical |
+| My Tickets filters | Single horizontal row | Wrapping row | Collapsed panel or stacked |
+| Ticket card | Flex row (metadata inline) | Flex row | Stacked column |
+| Ticket Detail fields | 2-column grid | 2-column grid | 1-column |
+| Buttons (form actions) | Inline row, left-aligned | Inline row | Full-width stacked |
+| Modals | Centered, max-width 600px | Centered, max-width 600px | Full-screen (small margin) |
 
 ### Touch Targets
-- All interactive elements on mobile must be at least 44px × 44px for comfortable touch
-- Increase spacing between interactive elements on mobile
-- Use larger font sizes for mobile inputs (16px minimum to prevent zoom)
+All interactive elements on mobile: minimum 44 × 44px; spacing between targets ≥ 8px; input font ≥ 16px (prevents iOS zoom).
 
-## Accessibility
+---
+
+## 14. Accessibility
 
 ### Focus States
-- All interactive elements have visible focus indicator (2px outline, `#0B7A46`, 2px offset)
-- Focus order follows logical reading order
-- Skip to main content link for keyboard navigation
+- 2px outline `#0B7A46`, 2px offset on all interactive elements.
+- Focus order follows logical reading order (top → bottom, left → right).
+- Skip-to-main-content link as first focusable element in the page.
 
-### Color Contrast
-- Text on white meets WCAG AA standards (4.5:1 for normal text, 3:1 for large text)
-- Primary green `#006B3C` on white: 6.2:1 (pass)
-- Error red `#C41E3A` on white: 5.8:1 (pass)
-- Secondary text `#5A6F65` on white: 4.6:1 (pass)
+### Color Contrast (WCAG AA)
+| Pairing | Ratio | Result |
+|---------|-------|--------|
+| `#006B3C` on white | 6.2:1 | Pass |
+| `#C41E3A` on white | 5.8:1 | Pass |
+| `#5A6F65` on white | 4.6:1 | Pass |
+| White on `#006B3C` | 6.2:1 | Pass |
 
-### Screen Reader Support
-- All form inputs have associated labels
-- Error messages are announced
-- Status changes are announced (loading, success, error)
-- Images and icons have alt text or aria-label
-- Buttons have descriptive labels
+### Non-Color Indicators
+- Validation errors: red border + icon + text (3 independent cues).
+- Required fields: asterisk `*` in label + `aria-required="true"`.
+- Status: uppercase text badge ("NEW").
+- Priority: text value ("LOW", "MEDIUM", "HIGH") in badge.
+- Focus: outline shape (not color alone).
+
+### ARIA and Screen-Reader Support
+- All `<input>`, `<select>`, `<textarea>` have associated `<label>` (for/id pair) or `aria-label`.
+- Validation error elements: `role="alert"` or `aria-live="polite"`.
+- Busy button: `aria-busy="true"`, `aria-label` includes "…loading".
+- Removed attachment rows: `aria-label` includes "Removed attachment: [filename]".
+- Modals: `role="dialog"`, `aria-modal="true"`, `aria-labelledby` pointing to title.
+- Loading spinners: `role="status"`, `aria-label="Loading"`.
 
 ### Keyboard Navigation
-- All features accessible via keyboard
-- Esc key closes modals and dropdowns
-- Enter key submits forms
-- Arrow keys navigate dropdowns and radio buttons
-- Tab key follows logical order
+- Tab: logical order; Esc: closes modals / dropdowns; Enter: submits focused form or activates button; Arrow keys: navigate radio groups and dropdowns.
 
-### Not Relying on Color Alone
-- Status indicated by badge text + color
-- Priority indicated by badge text + color
-- Errors indicated by icon + border + text + color
-- Focus indicated by outline + color
+---
 
-## Animation and Transitions
+## 15. Animation and Transitions
 
-### Subtle Transitions
-- Button hover: 150ms ease
-- Input focus: 150ms ease
-- Card hover: 200ms ease
-- Modal open/close: 200ms ease
-- Dropdown open/close: 150ms ease
+| Element | Duration | Easing |
+|---------|----------|--------|
+| Button hover / focus | 150ms | ease |
+| Input focus ring | 150ms | ease |
+| Card hover shadow | 200ms | ease |
+| Modal open / close | 200ms | ease |
+| Dropdown open / close | 150ms | ease |
+| Page content fade-in (optional) | 200ms | ease |
+| Skeleton shimmer | 2s infinite | ease-in-out |
+| Upload progress bar | real-time | linear |
 
-### Loading Animations
-- Spinner: Smooth continuous rotation
-- Skeleton shimmer: 2s ease-in-out infinite
+---
 
-### Page Transitions
-- Minimal or none; instant navigation feels snappiest
-- Optional: Subtle fade-in for content (200ms)
+## 16. Automated Assertion Targets
 
-## Error and Validation UX
+The following `data-testid` values must be present on their respective elements so unit and E2E tests can target them without relying on CSS classes or text content.
 
-### Inline Validation
-- Validate on blur (when user leaves field)
-- Show error immediately on blur if invalid
-- Clear error immediately when user corrects
-- Do not validate on every keystroke (annoying for typing)
+| `data-testid` | Element |
+|--------------|---------|
+| `submit-btn` | Create Ticket submit button |
+| `submit-btn-busy` | Submit button in busy / submitting state |
+| `cancel-btn` | Cancel / secondary navigation button |
+| `search-input` | My Tickets search field |
+| `filter-category` | Category filter dropdown |
+| `filter-related-system` | Related System filter dropdown |
+| `filter-status` | Status filter dropdown |
+| `filter-priority` | Priority filter dropdown |
+| `sort-control` | Sort dropdown |
+| `clear-filters-btn` | Clear Filters button |
+| `pagination` | Pagination container |
+| `ticket-number` | Ticket Number text in list card |
+| `status-badge` | Status badge (with `data-value`) |
+| `priority-badge` | Priority badge (with `data-value`) |
+| `empty-state` | Empty state component |
+| `error-{fieldName}` | Inline validation error message |
+| `counter-{fieldName}` | Character counter for summary / description |
+| `attachment-count` | "Attachments (N active)" heading |
+| `remove-attachment-btn` | Remove button on active attachment row |
+| `attachment-removed-{id}` | Soft-removed attachment row |
+| `requester-select` | Requester selection dropdown |
+| `continue-btn` | Requester Selection "Continue" button |
 
-### Form Submission Validation
-- Validate all fields on submit
-- Scroll to and focus first invalid field
-- Display all errors inline
-- Disable submit button until all errors cleared (or allow submit with validation)
+Required CSS classes for automated assertion:
+- `.field--error` on invalid input wrappers.
+- `.field--readonly` on read-only input wrappers.
+- `.btn--busy` on the submit button in the submitting state.
+- `.attachment--removed` on soft-removed attachment rows.
+- `.badge--priority-low`, `.badge--priority-medium`, `.badge--priority-high` on priority badges.
 
-### Success Feedback
-- Success banner appears at top of screen
-- Auto-dismiss after 5 seconds (or provide close button)
-- Navigate to relevant next screen (e.g., Ticket Detail after creation)
+---
 
-### Error Feedback
-- Error banner appears at top of screen
-- Remains visible until dismissed or corrected
-- Provide actionable next steps
+## 17. Visual Inspection Checklist and Screenshot Paths
 
-## Confirmation Dialogs
+### Screenshot Paths
 
-### Remove Attachment Confirmation
-- **Title:** "Remove Attachment?"
-- **Message:** "This will mark '[filename]' as removed. You won't be able to download it."
-- **Input:** Optional text area for removal reason
-- **Actions:**
-  - Danger button "Remove"
-  - Secondary button "Cancel"
+Playwright saves screenshots to the following paths. The coding agent must configure `playwright.config.ts` to match.
 
-## Component Reusability
+```
+artifacts/lab-02/screenshots/
+├── create-ticket/
+│   ├── desktop-initial.png
+│   ├── desktop-validation.png
+│   ├── desktop-submitting.png
+│   ├── desktop-success.png
+│   ├── tablet-initial.png
+│   └── mobile-initial.png
+├── my-tickets/
+│   ├── desktop-with-tickets.png
+│   ├── desktop-empty-state.png
+│   ├── desktop-no-results.png
+│   ├── desktop-search-active.png
+│   ├── tablet-with-tickets.png
+│   └── mobile-with-tickets.png
+└── ticket-detail/
+    ├── desktop-full.png
+    ├── desktop-attachments-active.png
+    ├── desktop-attachments-removed.png
+    ├── tablet-full.png
+    ├── mobile-full.png
+    └── ownership-error.png
+```
 
-All components defined in this spec should be:
-- **Reusable:** Built as independent, parameterized components
-- **Consistent:** Use the same component across all screens
-- **Maintainable:** Centralized styling, easy to update theme
-- **Documented:** Props, variants, and usage examples documented
+### Create Ticket — Visual Checklist
 
-### Suggested Component Library Structure
+- [ ] Page title "Create Ticket" visible at H1 size.
+- [ ] Required fields marked with red `*` asterisk after label text.
+- [ ] Read-only Requester field has `#F9F9F7` background, visually distinct from editable fields.
+- [ ] Editable inputs have white background with `#C0C8C4` border.
+- [ ] Focus ring (`#0B7A46`, 2px) visible on keyboard-focused field.
+- [ ] Invalid field shows red border + inline error message immediately below.
+- [ ] Character counters visible below Summary and Description fields.
+- [ ] Counter turns amber at ≥ 90 % of limit; red when over limit.
+- [ ] Priority radio buttons horizontal on desktop; vertical on mobile.
+- [ ] Submit button disabled (gray) when required fields are empty.
+- [ ] Submit button shows inline spinner + "Submitting…" during POST request.
+- [ ] No horizontal scroll at any viewport.
+- [ ] No clipping of labels or inputs at 375px mobile width.
+- [ ] Success banner uses `#EAF6EF` background + `#006B3C` left border.
+- [ ] Error banner uses `#FDF0F2` background + `#C41E3A` left border.
+
+### My Tickets — Visual Checklist
+
+- [ ] Page title "My Tickets" visible.
+- [ ] Search input, filter dropdowns, and sort control rendered without overlap.
+- [ ] "Clear Filters" button appears only when search or a filter is active.
+- [ ] Ticket cards render without clipping on any viewport.
+- [ ] Mobile cards stack metadata vertically; no unintended horizontal scroll.
+- [ ] Priority badge colors match spec: gray / amber / red for LOW / MEDIUM / HIGH.
+- [ ] Status badge "NEW" uses pale-green background + primary-green text.
+- [ ] Empty state (no tickets) shows illustration + "Create Your First Ticket" button.
+- [ ] No-results state (search/filter) shows "No Results" + "Clear Filters" button.
+- [ ] Skeleton loading covers list area (not blank white).
+- [ ] Pagination controls fully visible; active page button uses `#006B3C` background.
+- [ ] Page size selector visible and usable on mobile.
+- [ ] Attachment count "📎 N" visible on cards with attachments.
+
+### Ticket Detail — Visual Checklist
+
+- [ ] Breadcrumb "My Tickets / TKT-XXXXXX" displayed.
+- [ ] Status badge visible alongside ticket number in page title area.
+- [ ] Read-only fields have `#F9F9F7` background, clearly distinct from editable forms.
+- [ ] 2-column grid on desktop; 1-column on mobile; no field clipping.
+- [ ] Description preserves line breaks.
+- [ ] Active attachments: filename is a clickable link; "Download" and "Remove" buttons present.
+- [ ] Soft-removed attachments rendered as read-only metadata rows — always visible.
+  - "Removed" gray badge visible.
+  - Removal date and reason shown.
+  - No download link; no preview button.
+  - Row has muted `#9AA5A0` text on `#F9F9F7` background.
+- [ ] Upload zone hidden / replaced by "Maximum attachments reached" when 5 active attachments exist.
+- [ ] Ownership error screen (403) shows error message + "Back to My Tickets" button.
+- [ ] No horizontal scroll on any viewport.
+- [ ] Skeleton loading visible before data arrives.
+
+### General — Visual Checklist
+
+- [ ] Zen Green header (`#006B3C`) consistent across all screens.
+- [ ] Development Mode amber banner visible on every screen.
+- [ ] Active nav link has underline indicator; inactive has none.
+- [ ] Hamburger menu opens and closes correctly on mobile; tap targets ≥ 44px.
+- [ ] No inconsistent field styling (mixed border colors, inconsistent padding).
+- [ ] Badge text uppercase, padding consistent across all instances.
+- [ ] Modals centered on desktop; full-screen on mobile.
+- [ ] Focus rings visible when navigating by keyboard (Tab key) on all interactive elements.
+
+---
+
+## 18. Component Structure Reference
+
 ```
 /components
   /ui
-    Button.tsx
-    Input.tsx
+    Button.tsx          ← primary, secondary, danger, ghost + busy state
+    Input.tsx           ← editable, read-only, invalid, disabled
     Select.tsx
-    Textarea.tsx
-    Badge.tsx
+    Textarea.tsx        ← with character counter
+    Badge.tsx           ← status + priority variants
     Card.tsx
     Modal.tsx
-    Alert.tsx
+    Alert.tsx           ← success, error, warning, info
     Spinner.tsx
     EmptyState.tsx
     ErrorState.tsx
-    FileUpload.tsx
+    FileUpload.tsx      ← upload zone + file list with all 5 states
     Pagination.tsx
   /layout
     AppHeader.tsx
@@ -710,33 +670,30 @@ All components defined in this spec should be:
     RequesterSelector.tsx
     TicketCard.tsx
     TicketForm.tsx
-    AttachmentList.tsx
+    AttachmentList.tsx   ← handles active, uploading, failed, removed, unavailable
     TicketFilters.tsx
 ```
 
-## Developer Notes
-
-### CSS Approach
-- Use CSS-in-JS (styled-components, emotion) or utility-first CSS (Tailwind) for maintainability
-- Define theme tokens in central config to apply the fixed Zen Green theme consistently
-
-### State Management
-- Form state: React Hook Form or similar for validation and state management
-- Global state: Context or Redux for selected requester
-- Server state: React Query or SWR for API data fetching and caching
-
-### Testing
-- Component tests: Test component rendering, interactions, variants
-- Accessibility tests: Automated testing with jest-axe or similar
-- Visual regression tests: Screenshot-based tests using Playwright and manual visual inspection
-
-### Performance
-- Lazy load screens and heavy components
-- Optimize images and file uploads
-- Debounce search input to reduce API calls
-- Cache reference data (categories, related systems)
-- Virtualize long lists if ticket count grows
-
 ---
 
-This UI specification provides a comprehensive design system for the Requester Ticketing System. All screens, components, and interactions should follow these guidelines for a consistent, accessible, and polished user experience.
+## 19. Developer Notes
+
+### CSS Approach
+- Use utility-first CSS (Tailwind) or CSS-in-JS with the token values defined in Section 2.
+- Define all color tokens in a central config (`tailwind.config.ts` or `theme.ts`). Do not hard-code hex values in components.
+- The Zen Green theme is fixed for Lab 2; no runtime theming required.
+
+### State Management
+- Form state: React Hook Form (or equivalent) for validation, dirty-tracking, and submission state.
+- Global state: React Context for selected requester.
+- Server state: React Query or SWR for API data, caching reference data (categories, related systems).
+
+### Testing
+- Component tests: render each component variant; assert `data-testid` presence and CSS class application.
+- Playwright E2E: capture screenshots at the paths defined in Section 17; assert no console errors.
+- Use `axe-core` or `jest-axe` for automated accessibility checks on rendered components.
+
+### Performance
+- Debounce search input 300ms.
+- Cache `GET /api/categories` and `GET /api/related-systems` (rarely change).
+- Lazy-load screen components; skeleton loading on every async boundary.
