@@ -29,6 +29,9 @@ function Shell() {
           setSwitching(true);
         }}
       />
+      <div className="dev-banner" role="status">
+        ⚠️ DEVELOPMENT MODE — Not Real Authentication
+      </div>
       <main className="container" style={{ padding: "var(--space-8) 0" }}>
         <Card title={activeView === "create-ticket" ? "Create Ticket" : "My Tickets"}>
           <p>

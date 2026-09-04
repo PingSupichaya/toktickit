@@ -26,8 +26,12 @@ export function RequesterSelector({ onSelected }: RequesterSelectorProps) {
       <div className="requester-select__card">
         <h1 className="requester-select__title">TokTickIT</h1>
         <p className="requester-select__subtitle">
-          Select a Requester
+          Select a Requester (Development Mode)
         </p>
+
+        <div className="requester-select__info">
+          <Alert variant="info">This is a testing mechanism, not real authentication.</Alert>
+        </div>
 
         {loading && (
           <div style={{ textAlign: "center", padding: "24px 0" }}>

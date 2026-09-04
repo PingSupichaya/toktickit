@@ -611,19 +611,27 @@ button {
   color: #fff;
 }
 
+.app-header__nav-link::after {
+  content: "";
+  position: absolute;
+  left: var(--space-3);
+  right: var(--space-3);
+  bottom: -4px;
+  height: 3px;
+  border-radius: 2px;
+  background-color: transparent;
+}
+
+.app-header__nav-link:hover::after {
+  background-color: rgba(234, 246, 239, 0.6);
+}
+
 .app-header__nav-link--active {
   color: #fff;
 }
 
 .app-header__nav-link--active::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -2px;
-  height: 3px;
   background-color: var(--color-pale-green);
-  border-radius: 2px;
 }
 
 .app-header__right {
@@ -786,6 +794,14 @@ button {
   font-size: 1rem;
   text-align: center;
   margin: 0 0 var(--space-6);
+}
+
+.requester-select__info {
+  margin: 0 0 var(--space-6);
+}
+
+.requester-select__info .alert {
+  font-size: 0.875rem;
 }
 
 .requester-select__form {
