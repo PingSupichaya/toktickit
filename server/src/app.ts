@@ -32,4 +32,28 @@ app.get("/api/categories", async (_req: Request, res: Response) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Development Requester selector
+// GET /api/requesters -> { data: [{ id, name, email }, ...] } ordered by id
+// ascending. Only active requesters are returned (BR-05, FR-02).
+// ---------------------------------------------------------------------------
+app.get("/api/requesters", async (_req: Request, res: Response) => {
+  try {
+    const requesters = await getPrisma().requester.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, email: true },
+      orderBy: { id: "asc" },
+    });
+    res.status(200).json({ data: requesters });
+  } catch (err) {
+    console.error("Failed to fetch requesters:", err);
+    res.status(500).json({
+      error: {
+        message: "Failed to fetch requesters",
+        code: "INTERNAL_SERVER_ERROR",
+      },
+    });
+  }
+});
+
 export default app;
