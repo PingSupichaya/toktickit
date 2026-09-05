@@ -18,6 +18,7 @@ Chawin Chinpraditsuk — 67070501012 — GitHub: @Finyakginshabu
 |  https://github.com/PingSupichaya/toktickit/pull/29  | feature/attachment-api | merge branch into lab2-staging. |
 |  https://github.com/PingSupichaya/toktickit/pull/30  | feature/create-ticket | The Create Ticket page implementation aligns well with the UI specifications and passes all acceptance criteria and CreateTicketForm.test.tsx passes cleanly. |
 |  https://github.com/PingSupichaya/toktickit/pull/31  | feature/my-tickets | All functional requirements and test cases passed smoothly. Web page can be improved by adding container spacing. |
+|  https://github.com/PingSupichaya/toktickit/pull/33  | feature/e2e-testing | Everything meets the lab requirements and acceptance criteria |
 
 
 ### Lab2/Sprint specification and test plan documents
@@ -95,7 +96,7 @@ For topic 2, I will change this hard code into another condition.
 
     Overall, this is a top-tier UI Specification! Once the Visual Checklist and screenshot path definitions are included, this PR is good to merge.  
 **How I responded**:  
-	Looks like I really forgot to add Visual Inspection Checklist & Screenshot. Labsheet has too many pages, so I will be more careful.  
+	Looks like I really forgot to add Visual Inspection Checklist & Screenshot. Labsheet has too many pages, so I will be more careful.   
 
 
 	**Approved**: Approved kub! Awesome job on addressing all the feedback! The specifications are now ready to be handed over to the coding agent for implementation. Let's go next kubbb!  
@@ -115,7 +116,7 @@ But there is some error I've got when running your project on my local, so pleas
 
 I think what cause this is you have updated schema.prisma in Lab 2 to add isActive Boolean @default(true). However, TypeScript types for Prisma are generated inside node_modules/@prisma/client. When schema.prisma is edited, Prisma does not automatically regenerate those TypeScript type definitions until you explicitly command it to. And because npx prisma generate was not run after pulling or making the schema change, TypeScript was still inspecting the old types from Lab 1 kub.
 **How I responded**:  
-    Sorry kub, I've added isActive in schema so you should run npx prisma generate to update types cause prisma doesn't auto regenerate
+    Sorry kub, I've added isActive in schema so you should run npx prisma generate to update types cause prisma doesn't auto regenerate.  
 
 
 ### Lab2/feature/ui-foundation
@@ -136,28 +137,28 @@ Please fix the responsive CSS rules and layout wrapping, then re-request a revie
     I have changed native HTML component to custom dropdown so I think this problem has solved.
 	**Approved:** Well after you have fixed the responsive bugs that I mentioned, Everything looks great now! But I noticed that in the very first page, there is a missing messege "DEVELOPER MODE" so make sure you bring it back in next issue kubbb. Figthing!
 **How I responded**: 
-	I think I already add "Developer mode" in this fix😡
+	I think I already add "Developer mode" in this fix😡  
 
 
 ### Lab2/feature/reference APIs
 Reviewer comment I received:  
     **Approved:** I have performed local testing against the database and verified all required endpoints according to api-spec.md and acceptance criteria (AC-01, AC-03, AC-04, AC-05, AC-08). All backend tests are passing cleanly. Great work! Approved kubbb! 
 **How I responded**:  
-    Thanks for your review kub. <3
+    Thanks for your review kub. <3  
 
 
 ### Lab2/feature/attachment api, Revert "Lab2/feature/attachment api"
 Reviewer comment I received:  
     **Approved:** All automated test suites for both Server and Client passed successfully! Coverage for AC-12, AC-13, and AC-14 is fully verified. Excellent work kub! Hope to see the UI for creating ticket soon! 
 **How I responded**:  
-    Thanks for review! but I choose false base branch to merge into😭. Thanks a lot for helping me revert this pr and merge into lab2-staging.
+    Thanks for review! but I choose false base branch to merge into😭. Thanks a lot for helping me revert this pr and merge into lab2-staging.  
 
 
 ### Lab2/feature/create ticket
 Reviewer comment I received:  
     **Approved:** The Create Ticket page implementation aligns well with the UI specifications and passes all acceptance criteria. The displayed as read-only, correctly to the active context user. Category and Related System dropdowns fetch and populate active options dynamically from the API. I love that priority radio buttons render horizontally on desktop viewports and collapse cleanly into a vertical stack on mobile screens. Also, file attachment area behaves optionally as required. Upon successful ticket submission, the drag & drop area disables properly until the top notification is dismissed. And lastly, CreateTicketForm.test.tsx passes cleanly. Everything functions as intended with solid responsive behavior and state management. Great job kub! 
 **How I responded**:  
-    I really appreciate your detailed review, thanksssss😍.
+    I really appreciate your detailed review, thanksssss😍.  
 
 
 ### Lab2/feature/my-tickets
@@ -170,19 +171,21 @@ But here's a little bit of suggestion. During testing on smaller screen sizes (M
 
 Since all features, responsiveness, and tests are functioning properly, Approved to merge kub! You can polish the container spacing in a quick follow-up PR if needed. 
 **How I responded**:  
-    I see, thanks for the review. I will add some spaces from the edge in the next PR🙏.
+    I see, thanks for the review. I will add some spaces from the edge in the next PR🙏.  
 
 
 ### Lab2/feature/ticket-detail
 Reviewer comment I received:  
-    **Approved:** 
-**How I responded**: 
+    **Approved:** Tested the Ticket Detail page, Ownership Guard, and Attachment Management flows locally. Everything works according to the specified requirements! All automated test suites are also passing cleanly.  
+
+PS. I love the way to download attached file but for suggestion it might be better if there is a clearly visible download button. Also, it would be even better if the time the file was deleted were indicated. But if you don't think it's necessary, there's no need to include it! Still approved kubbb let's go next!  
+**How I responded**: Thanks kubb. I think for removing date doesn't need to include time just know the date is enough for me kub😆.  
 
 
 ### Lab2/feature/e2e-testing
 Reviewer comment I received:  
-    **Approved:** 
-**How I responded**:  
+    **Approved:** I have performed the final peer review and verified all E2E test runs and submission artifacts locally. Everything meets the lab requirements and acceptance criteria! All automated E2E test suites executed successfully without errors. Visual evidence and screenshots captured across all required viewports and clearly stored in artifacts/lab-02/screenshots/ as required lab2 structure kubb! Great job for lab 2!  
+**How I responded**:  Thanks for your reviews until my last issue. <3
 
 
 
