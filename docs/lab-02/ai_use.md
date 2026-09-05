@@ -21,3 +21,5 @@
 
 ## Reflection
 Two or three sentences: what made your prompts better, and one place you had to correct or reject what the agent produced.
+
+> After I have changed the agent, I need to brief task very in detail. To make the agent does its work correctly, I need to answer the question directly and clearly. Don't let it guess what it should do
