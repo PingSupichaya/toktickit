@@ -1,61 +1,75 @@
 import { useState } from "react";
-import { checkSystem, Category } from "./api.js";
+import { RequesterProvider, useRequester } from "./context/RequesterContext.js";
+import { RequesterSelector } from "./components/features/RequesterSelector.js";
+import { TicketForm } from "./components/features/TicketForm.js";
+import { MyTickets } from "./components/features/MyTickets.js";
+import { TicketDetail } from "./components/features/TicketDetail.js";
+import { AppHeader, HeaderView } from "./components/layout/AppHeader.js";
+import { Card } from "./components/ui/Card.js";
 
-// UI states you must handle for Issue 4: idle, loading, success, error.
-type UiState = "idle" | "loading" | "success" | "error";
+function Shell() {
+  const { requester, clearRequester } = useRequester();
+  const [switching, setSwitching] = useState(false);
+  const [activeView, setActiveView] = useState<HeaderView>("my-tickets");
+  const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
 
-export default function App() {
-  const [state, setState] = useState<UiState>("idle");
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [errorMessage, setErrorMessage] = useState("");
-
-  async function handleCheck() {
-    setState("loading");
-    try {
-      const status = await checkSystem();
-      setCategories(status.categories);
-      setState("success");
-    } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Unknown error");
-      setState("error");
-    }
+  if (!requester || switching) {
+    return (
+      <RequesterSelector
+        onSelected={() => {
+          setSwitching(false);
+        }}
+      />
+    );
   }
 
   return (
-    <div className="container py-5" style={{ maxWidth: 640 }}>
-      <h1 className="h3 mb-4">
-        TokTickIT <span className="text-success">IT Service Desk</span>
-      </h1>
-
-      <button className="btn btn-success" onClick={handleCheck} disabled={state === "loading"}>
-        {state === "loading" ? "Loading…" : "Check System"}
-      </button>
-
-      {state === "success" && (
-        <div>
-          <div>
-            System status: <span className="text-success">Online</span>
+    <>
+      <AppHeader
+        activeView={activeView}
+        onNavigate={(view) => {
+          setSelectedTicketId(null);
+          setActiveView(view);
+        }}
+        onChangeRequester={() => {
+          clearRequester();
+          setSwitching(true);
+        }}
+      />
+      <div className="dev-banner" role="status">
+        ⚠️ DEVELOPMENT MODE — Not Real Authentication
+      </div>
+      <main className="container" style={{ padding: "var(--space-8) var(--space-6)" }}>
+        {activeView === "create-ticket" ? (
+          <div className="create-ticket-page">
+            <h1 className="screen-title">Create Ticket</h1>
+            <Card>
+              <TicketForm onCancel={() => setActiveView("my-tickets")} />
+            </Card>
           </div>
-          <br/><h5>Categories List</h5>
-          <div className="text-muted small mt-1">
-            Fetched {categories.length} {categories.length === 1 ? "category" : "categories"} from
-            the API.
-          </div>
-          <ul className="list-group mt-3">
-            {categories.map((category) => (
-              <li key={category.id} className="list-group-item">
-                {category.id}. {category.name}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+        ) : activeView === "ticket-detail" && selectedTicketId !== null ? (
+          <TicketDetail
+            ticketId={selectedTicketId}
+            onBack={() => setActiveView("my-tickets")}
+          />
+        ) : (
+          <MyTickets
+            onCreateTicket={() => setActiveView("create-ticket")}
+            onOpenTicket={(ticket) => {
+              setSelectedTicketId(ticket.id);
+              setActiveView("ticket-detail");
+            }}
+          />
+        )}
+      </main>
+    </>
+  );
+}
 
-      {state === "error" && (
-        <div>
-          System status: <span className="text-danger">{errorMessage}</span>
-        </div>
-      )}
-    </div>
+export default function App() {
+  return (
+    <RequesterProvider>
+      <Shell />
+    </RequesterProvider>
   );
 }

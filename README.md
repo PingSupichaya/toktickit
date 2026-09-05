@@ -64,6 +64,45 @@ cd client
 npm test
 ```
 
+### End-to-end tests (Playwright)
+
+The E2E suite runs the full user workflow in a real (headless) Chromium browser and saves screenshots to `artifacts/lab-02/screenshots/` as evidence. The Playwright config lives at the repository root.
+
+**Prerequisites**
+- Docker Desktop is running and the `toktickit-postgres` container is up (see "PostgreSQL via Docker" above).
+- The API server is reachable on port 3000. `playwright.config.ts` starts the client automatically; it will reuse an already-running API if present, otherwise you must start one:
+  ```bash
+  cd server
+  npm run dev
+  ```
+
+**Run the E2E tests** (from the repository root):
+
+```bash
+# First time only: install Playwright + the Chromium browser
+npm install
+npx playwright install chromium
+
+# Run the Lab 2 E2E suite (testDir is already e2e/lab-02, so no path argument needed)
+npx playwright test
+```
+
+Useful options:
+
+```bash
+npx playwright test --headed      # Watch the browser while it runs
+npx playwright test --reporter=html   # Open an HTML report after running
+```
+
+**What it verifies** — `e2e/lab-02/requester-ticket-flow.spec.ts` (5 tests, serial):
+1. Select a requester → create a ticket (validation, submitting, success states) at desktop/tablet/mobile.
+2. My Tickets: responsive layout, search results, and empty/no-results states.
+3. Ticket detail + attachment lifecycle: upload, remove-confirmation modal, muted removed row.
+4. Ownership block: another requester gets a 403 error screen.
+5. Visual checks: Zen Green theme, focus rings, hamburger menu, 2→1 column grid collapse.
+
+After running, confirm the screenshots were written to `artifacts/lab-02/screenshots/`.
+
 ### Manual verification
 
 Use these steps to confirm each feature end to end. Do them in order — each one builds on the last.
