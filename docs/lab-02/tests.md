@@ -139,9 +139,8 @@ npm run test:watch        # Watch mode (development)
 
 # --- End-to-End tests (Playwright) ---
 # Run from the repository root; testDir is e2e/ — requires the API server on :3000
-npx playwright test                          # Run all E2E specs (client started automatically via webServer)
+npx playwright test                          # Run all E2E specs (testDir = e2e/lab-02; client started automatically via webServer)
 npx playwright test --headed                 # Run with browser visible
-npx playwright test e2e/lab-02/              # Run only Lab 2 E2E specs
 npx playwright test --reporter=html          # Generate HTML report
 
 # --- Playwright screenshot evidence ---
