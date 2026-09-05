@@ -93,7 +93,7 @@ describe("AttachmentSection (T-021) - AC-06 / AC-07", () => {
       "Removed attachment: old-screenshot.png"
     );
     expect(within(removedRow).getByText("Removed")).toBeInTheDocument();
-    expect(within(removedRow).getByText("Duplicated file")).toBeInTheDocument();
+    expect(within(removedRow).getByText("Reason: Duplicated file")).toBeInTheDocument();
     expect(within(removedRow).queryByRole("link")).not.toBeInTheDocument();
     expect(
       within(removedRow).queryByTestId("remove-attachment-btn")
@@ -176,6 +176,7 @@ describe("AttachmentSection (T-021) - AC-06 / AC-07", () => {
     renderSection([active1]);
 
     await user.click(screen.getByTestId("remove-attachment-btn"));
+    await user.type(screen.getByTestId("removal-reason"), "Wrong file");
     await user.click(screen.getByTestId("confirm-remove-btn"));
 
     await waitFor(() => {
@@ -188,6 +189,22 @@ describe("AttachmentSection (T-021) - AC-06 / AC-07", () => {
     expect(screen.getByTestId("attachment-count")).toHaveTextContent(
       "Attachments (1 active)"
     );
+  });
+
+  it("requires a reason before removing an attachment", async () => {
+    renderSection([active1]);
+
+    await user.click(screen.getByTestId("remove-attachment-btn"));
+    await user.click(screen.getByTestId("confirm-remove-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("removal-error")).toHaveTextContent(
+        "Reason is required before removing"
+      );
+    });
+    expect(vi.mocked(api.removeAttachment)).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Remove Attachment" })).toBeInTheDocument();
+    expect(screen.getByTestId("attachment-51")).toBeInTheDocument();
   });
 
   it("uploads a selected file and increments the active count (AC-06)", async () => {

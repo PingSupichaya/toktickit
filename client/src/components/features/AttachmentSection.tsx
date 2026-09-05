@@ -69,13 +69,17 @@ export function AttachmentSection({
 
   async function confirmRemove() {
     if (!pendingRemove) return;
+    if (!removalReason.trim()) {
+      setRemovalError("Reason is required before removing");
+      return;
+    }
     setRemovalBusy(true);
     setRemovalError(null);
     try {
       const updated = await removeAttachment(
         pendingRemove.id,
         requesterId,
-        removalReason.trim() || undefined
+        removalReason.trim()
       );
       setRows((prev) =>
         prev.map((a) =>
@@ -167,7 +171,7 @@ export function AttachmentSection({
                   )}
                   {attachment.removalReason && (
                     <span className="attachment-row__reason">
-                      {attachment.removalReason}
+                      Reason: {attachment.removalReason}
                     </span>
                   )}
                 </span>
@@ -268,7 +272,7 @@ export function AttachmentSection({
         </p>
         <div className="field">
           <label className="field__label" htmlFor="removal-reason">
-            Reason (optional)
+            Reason <span aria-hidden="true">*</span>
           </label>
           <input
             id="removal-reason"
@@ -276,6 +280,8 @@ export function AttachmentSection({
             data-testid="removal-reason"
             value={removalReason}
             maxLength={500}
+            required
+            aria-required="true"
             onChange={(e) => setRemovalReason(e.target.value)}
             placeholder="e.g. Wrong file uploaded"
           />

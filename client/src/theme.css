@@ -1734,9 +1734,8 @@ button {
 .attachment-row__reason {
   font-size: 0.75rem;
   color: var(--color-text-secondary);
-  max-width: 280px;
   overflow-wrap: anywhere;
-  text-align: right;
+  text-align: left;
 }
 
 .attachment-row__btn--danger.btn--ghost:hover {
