@@ -1,41 +1,32 @@
-import { InputHTMLAttributes, ReactNode } from "react";
+import { TextareaHTMLAttributes } from "react";
 
-interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
+interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label: string;
   required?: boolean;
   error?: string;
   hint?: string;
-  readonly?: boolean;
+  maxLength?: number;
   id?: string;
+  "data-testid"?: string;
   errorTestId?: string;
   counterTestId?: string;
-  children?: ReactNode;
 }
 
-export function Input({
+export function Textarea({
   label,
   required = false,
   error,
   hint,
-  readonly = false,
+  maxLength,
   id,
+  "data-testid": testId,
   errorTestId,
   counterTestId,
-  children,
-  className = "",
   value,
-  maxLength,
+  className = "",
   ...rest
-}: InputProps) {
-  const fieldId = id ?? `input-${label.replace(/\s+/g, "-").toLowerCase()}`;
-  const wrapperClass = [
-    "field",
-    error ? "field--error" : "",
-    readonly ? "field--readonly" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-
+}: TextareaProps) {
+  const fieldId = id ?? `textarea-${label.replace(/\s+/g, "-").toLowerCase()}`;
   const currentLength = typeof value === "string" ? value.length : 0;
 
   let counterClass = "";
@@ -49,37 +40,39 @@ export function Input({
   }
 
   return (
-    <div className={wrapperClass}>
-      <label className={`field__label${required ? " field__label--required" : ""}`} htmlFor={fieldId}>
+    <div className={`field${error ? " field--error" : ""}`}>
+      <label
+        className={`field__label${required ? " field__label--required" : ""}`}
+        htmlFor={fieldId}
+      >
         {label}
       </label>
-      <input
+      <textarea
         id={fieldId}
-        className={`input ${className}`}
-        readOnly={readonly}
+        className={`textarea ${className}`}
         aria-required={required || undefined}
         aria-invalid={error ? true : undefined}
-        value={value}
         maxLength={maxLength}
+        value={value}
+        data-testid={testId}
         {...rest}
       />
-      {maxLength !== undefined && (
-        <div className="field__status">
+      <div className="field__status">
+        {hint && <span className="field__hint">{hint}</span>}
+        {maxLength !== undefined && (
           <span
             className={`field__status-counter${counterClass}`}
             data-testid={counterTestId}
           >
             {currentLength} / {maxLength} characters
           </span>
-        </div>
-      )}
-      {hint && <span className="field__hint">{hint}</span>}
+        )}
+      </div>
       {error && (
         <span className="field__error" role="alert" data-testid={errorTestId}>
           {error}
         </span>
       )}
-      {children}
     </div>
   );
 }

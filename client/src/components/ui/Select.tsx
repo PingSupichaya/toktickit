@@ -14,24 +14,28 @@ interface SelectProps<T extends string | number> {
   label: string;
   required?: boolean;
   error?: string;
+  disabled?: boolean;
   options: Option<T>[];
   placeholder?: string;
   value: T | "";
   onChange: (value: T) => void;
   id?: string;
   "data-testid"?: string;
+  errorTestId?: string;
 }
 
 export function Select<T extends string | number>({
   label,
   required = false,
   error,
+  disabled = false,
   options,
   placeholder = "Select…",
   value,
   onChange,
   id,
   "data-testid": testId,
+  errorTestId,
 }: SelectProps<T>) {
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(-1);
@@ -59,6 +63,7 @@ export function Select<T extends string | number>({
   }, [open]);
 
   function onKeyDown(e: ReactKeyboardEvent<HTMLDivElement>) {
+    if (disabled) return;
     if (!open) {
       if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
         e.preventDefault();
@@ -123,6 +128,7 @@ export function Select<T extends string | number>({
           aria-invalid={error ? true : undefined}
           aria-haspopup="listbox"
           aria-expanded={open}
+          disabled={disabled}
           onClick={() => {
             setOpen((o) => !o);
             if (!open) setHighlight(options.findIndex((o) => o.value === value));
@@ -185,7 +191,7 @@ export function Select<T extends string | number>({
         )}
       </div>
       {error && (
-        <span className="field__error" role="alert">
+        <span className="field__error" role="alert" data-testid={errorTestId}>
           {error}
         </span>
       )}

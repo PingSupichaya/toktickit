@@ -35,6 +35,7 @@ export function Button({
       className={classes}
       disabled={disabled || busy}
       aria-busy={busy || undefined}
+      aria-label={busy ? `${typeof children === "string" ? children : "Submitting"} …loading` : undefined}
       {...rest}
     >
       {busy && <span className="spinner" aria-hidden="true" />}
