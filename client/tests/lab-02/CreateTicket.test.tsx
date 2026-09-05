@@ -62,6 +62,17 @@ beforeEach(() => {
   vi.mocked(api.fetchRelatedSystems).mockResolvedValue(relatedSystems);
   vi.mocked(api.createTicket).mockResolvedValue(createdTicket);
   vi.mocked(api.uploadAttachment).mockResolvedValue(uploadedAttachment);
+  vi.mocked(api.fetchTickets).mockResolvedValue({
+    items: [],
+    pagination: {
+      page: 1,
+      pageSize: 10,
+      totalCount: 0,
+      totalPages: 1,
+      hasNextPage: false,
+      hasPreviousPage: false,
+    },
+  });
 });
 
 const user = userEvent.setup();
@@ -77,7 +88,7 @@ async function openCreateTicket() {
       "Alice Johnson"
     );
   });
-  await user.click(screen.getByRole("button", { name: "Create Ticket" }));
+  await user.click(screen.getByTestId("create-ticket-btn"));
   await waitFor(() => {
     expect(screen.getByTestId("submit-btn")).toBeInTheDocument();
   });
@@ -99,7 +110,7 @@ async function fillValidForm() {
   await user.click(screen.getByRole("radio", { name: "MEDIUM" }));
 }
 
-describe("CreateTicketForm (T-009 / T-010)", () => {
+describe("CreateTicket (T-009 / T-010)", () => {
   it("shows skeleton loading for reference data and disables the submit button while fetching", async () => {
     vi.mocked(api.fetchCategories).mockImplementation(() => new Promise(() => {}));
     vi.mocked(api.fetchRelatedSystems).mockImplementation(

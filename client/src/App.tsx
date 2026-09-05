@@ -2,6 +2,7 @@ import { useState } from "react";
 import { RequesterProvider, useRequester } from "./context/RequesterContext.js";
 import { RequesterSelector } from "./components/features/RequesterSelector.js";
 import { TicketForm } from "./components/features/TicketForm.js";
+import { MyTickets } from "./components/features/MyTickets.js";
 import { AppHeader, HeaderView } from "./components/layout/AppHeader.js";
 import { Card } from "./components/ui/Card.js";
 
@@ -42,14 +43,7 @@ function Shell() {
             </Card>
           </div>
         ) : (
-          <Card title="My Tickets">
-            <p>
-              Logged in as <strong>{requester.name}</strong> ({requester.email}).
-            </p>
-            <p>
-              The My Tickets screen will appear here in a later sprint.
-            </p>
-          </Card>
+          <MyTickets onCreateTicket={() => setActiveView("create-ticket")} />
         )}
       </main>
     </>
