@@ -207,6 +207,17 @@ button {
   cursor: not-allowed;
 }
 
+/* Busy (loading) state keeps the primary background; only the cursor and
+   pointer-events change (ui-spec 6.1). */
+.btn--busy,
+.btn--busy:disabled,
+.btn--busy:disabled:hover {
+  background-color: var(--color-primary) !important;
+  color: #fff !important;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 /* ---------------------------------------------------------------------------
    Form controls
    --------------------------------------------------------------------------- */
@@ -429,8 +440,18 @@ button {
 .field__status {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-3);
   font-size: 0.75rem;
   color: var(--color-text-secondary);
+}
+
+.field__status .field__hint {
+  margin-right: auto;
+}
+
+.field__status-counter {
+  white-space: nowrap;
 }
 
 .counter--near {
@@ -811,6 +832,283 @@ button {
   margin-top: var(--space-5);
 }
 
+/* ---------------------------------------------------------------------------
+   Create Ticket screen (ui-spec 12.2)
+   --------------------------------------------------------------------------- */
+.create-ticket-page {
+  max-width: 800px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.create-ticket-page .screen-title {
+  margin: 0 0 var(--space-6);
+}
+
+.create-ticket-page .card {
+  padding: var(--space-8);
+}
+
+.create-ticket__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.create-ticket__form .alert {
+  margin-bottom: var(--space-2);
+}
+
+.create-ticket__form .btn--ghost {
+  padding: 2px var(--space-2);
+}
+
+.create-ticket__actions {
+  display: flex;
+  gap: var(--space-4);
+  justify-content: flex-start;
+  margin-top: var(--space-2);
+}
+
+.create-ticket__actions .btn--secondary {
+  margin-left: var(--space-1);
+}
+
+/* Priority radio group (ui-spec 7.4) */
+.create-ticket__priority {
+  border: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+
+.radio-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 1rem;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.radio-input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.radio-input:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+.select-skeleton {
+  display: block;
+  height: 48px;
+  border-radius: var(--radius-control);
+}
+
+/* Visually hidden but focusable (used for the file input). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.field__label-optional {
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+
+/* Attachments upload zone (ui-spec 12.2 #7 / section 9) */
+.upload-zone {
+  border: 2px dashed var(--color-border-input);
+  border-radius: 8px;
+  background-color: var(--color-bg-readonly);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.upload-zone:hover,
+.upload-zone:focus-within,
+.upload-zone--dragover {
+  border-color: var(--color-primary-hover);
+  background-color: var(--color-pale-green);
+}
+
+.upload-zone--disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.upload-zone__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-8);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  font: inherit;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.upload-zone__inner:disabled {
+  cursor: not-allowed;
+}
+
+.upload-zone__inner:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+.upload-zone__icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.upload-zone__title {
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.upload-zone__hint {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.attachment-max {
+  padding: var(--space-3) var(--space-4);
+  border: 1px dashed var(--color-border);
+  border-radius: 8px;
+  background-color: var(--color-bg-readonly);
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}
+
+.attachment-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.attachment-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background-color: var(--color-bg-surface);
+}
+
+.attachment-row--failed {
+  border-color: var(--color-error);
+}
+
+.attachment-row__icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.attachment-row__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.attachment-row__name {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.attachment-row__size {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.attachment-row__status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.attachment-row__status .spinner {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+}
+
+.attachment-row__error {
+  color: var(--color-error);
+}
+
+.attachment-row__actions {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
+.attachment-row__btn.btn--ghost {
+  padding: 4px var(--space-2);
+}
+
+.progress-bar {
+  display: block;
+  width: 96px;
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  background-color: var(--color-pale-green);
+  position: relative;
+}
+
+.progress-bar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+  border-radius: 2px;
+  background-color: var(--color-primary-hover);
+  animation: progress-indeterminate 1.1s ease-in-out infinite;
+}
+
+@keyframes progress-indeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(350%);
+  }
+}
+
 /* Responsive */
 @media (max-width: 767px) {
   .app-header {
@@ -870,5 +1168,49 @@ button {
 
   .requester-select__form .btn {
     width: 100%;
+  }
+
+  /* Create Ticket mobile adaptations (ui-spec 13) */
+  .create-ticket-page .card {
+    padding: var(--space-6);
+  }
+
+  .create-ticket__actions {
+    flex-direction: column;
+  }
+
+  .create-ticket__actions .btn {
+    width: 100%;
+  }
+
+  .create-ticket__actions .btn--secondary {
+    margin-left: 0;
+  }
+
+  .radio-group {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .radio-item {
+    min-height: 44px;
+  }
+
+  .upload-zone__inner {
+    padding: var(--space-6);
+    min-height: 96px;
+  }
+
+  .attachment-row {
+    flex-wrap: wrap;
+  }
+
+  .attachment-row__status {
+    margin-left: 0;
+    white-space: normal;
+  }
+
+  .attachment-row__actions .btn {
+    min-height: 44px;
   }
 }

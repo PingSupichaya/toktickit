@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { RequesterProvider, useRequester } from "./context/RequesterContext.js";
 import { RequesterSelector } from "./components/features/RequesterSelector.js";
+import { TicketForm } from "./components/features/TicketForm.js";
 import { AppHeader, HeaderView } from "./components/layout/AppHeader.js";
 import { Card } from "./components/ui/Card.js";
 
@@ -33,15 +34,23 @@ function Shell() {
         ⚠️ DEVELOPMENT MODE — Not Real Authentication
       </div>
       <main className="container" style={{ padding: "var(--space-8) 0" }}>
-        <Card title={activeView === "create-ticket" ? "Create Ticket" : "My Tickets"}>
-          <p>
-            Logged in as <strong>{requester.name}</strong> ({requester.email}).
-          </p>
-          <p>
-            The {activeView === "create-ticket" ? "Create Ticket" : "My Tickets"}{" "}
-            screen will appear here in a later sprint.
-          </p>
-        </Card>
+        {activeView === "create-ticket" ? (
+          <div className="create-ticket-page">
+            <h1 className="screen-title">Create Ticket</h1>
+            <Card>
+              <TicketForm onCancel={() => setActiveView("my-tickets")} />
+            </Card>
+          </div>
+        ) : (
+          <Card title="My Tickets">
+            <p>
+              Logged in as <strong>{requester.name}</strong> ({requester.email}).
+            </p>
+            <p>
+              The My Tickets screen will appear here in a later sprint.
+            </p>
+          </Card>
+        )}
       </main>
     </>
   );
