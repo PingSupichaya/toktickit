@@ -5,6 +5,7 @@ import {
   createTicket,
   fetchCategories,
   fetchRelatedSystems,
+  uploadAttachment,
 } from "../../api.js";
 import { useRequester } from "../../context/RequesterContext.js";
 import { Alert } from "../ui/Alert.js";
@@ -12,6 +13,10 @@ import { Button } from "../ui/Button.js";
 import { Input } from "../ui/Input.js";
 import { Select } from "../ui/Select.js";
 import { Textarea } from "../ui/Textarea.js";
+import {
+  AttachmentUploadZone,
+  PendingAttachmentFile,
+} from "./AttachmentUploadZone.js";
 
 const PRIORITIES: RequestedPriority[] = ["LOW", "MEDIUM", "HIGH"];
 
@@ -76,6 +81,11 @@ export function TicketForm({ onCancel }: TicketFormProps) {
   const [serverError, setServerError] = useState<string | null>(null);
   const [success, setSuccess] = useState<Ticket | null>(null);
 
+  const [attachmentFiles, setAttachmentFiles] = useState<PendingAttachmentFile[]>(
+    []
+  );
+  const [createdTicketId, setCreatedTicketId] = useState<number | null>(null);
+
   const loadReferenceData = useCallback(async () => {
     setRefLoading(true);
     setRefError(null);
@@ -121,6 +131,68 @@ export function TicketForm({ onCancel }: TicketFormProps) {
     setTouched({ summary: false, description: false });
   }
 
+  function createFileId(file: File): string {
+    return `${file.name}-${file.size}-${Math.random().toString(36).slice(2)}`;
+  }
+
+  function addAttachmentFiles(newFiles: File[]) {
+    if (success !== null) return;
+    setAttachmentFiles((prev) => [
+      ...prev,
+      ...newFiles.map((file) => ({
+        id: createFileId(file),
+        file,
+        status: "pending" as const,
+      })),
+    ]);
+  }
+
+  function removeAttachmentFile(id: string) {
+    setAttachmentFiles((prev) => prev.filter((f) => f.id !== id));
+  }
+
+  function setAttachmentStatus(
+    id: string,
+    status: PendingAttachmentFile["status"],
+    extra?: Partial<PendingAttachmentFile>
+  ) {
+    setAttachmentFiles((prev) =>
+      prev.map((f) => (f.id === id ? { ...f, status, ...extra } : f))
+    );
+  }
+
+  async function uploadFiles(
+    ticketId: number,
+    requesterId: number,
+    targets: PendingAttachmentFile[]
+  ) {
+    for (const item of targets) {
+      setAttachmentStatus(item.id, "uploading", { error: undefined });
+      try {
+        await uploadAttachment(ticketId, requesterId, item.file);
+        setAttachmentStatus(item.id, "uploaded");
+      } catch (err) {
+        setAttachmentStatus(item.id, "failed", {
+          error:
+            err instanceof Error ? err.message : "Upload failed. Try again.",
+        });
+      }
+    }
+  }
+
+  async function retryAttachmentFile(id: string) {
+    if (!createdTicketId || !requester) return;
+    const item = attachmentFiles.find((f) => f.id === id);
+    if (!item) return;
+    await uploadFiles(createdTicketId, requester.id, [item]);
+  }
+
+  function dismissSuccess() {
+    setSuccess(null);
+    setCreatedTicketId(null);
+    setAttachmentFiles([]);
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!requester || !isFormValid) return;
@@ -137,7 +209,15 @@ export function TicketForm({ onCancel }: TicketFormProps) {
         requestedPriority: priority as RequestedPriority,
       });
       setSuccess(ticket);
+      setCreatedTicketId(ticket.id);
       resetForm();
+      if (attachmentFiles.length > 0) {
+        await uploadFiles(
+          ticket.id,
+          requester.id,
+          attachmentFiles.filter((f) => f.status !== "uploaded")
+        );
+      }
     } catch (err) {
       setServerError(
         err instanceof Error ? err.message : "Failed to create ticket. Try again."
@@ -162,7 +242,7 @@ export function TicketForm({ onCancel }: TicketFormProps) {
             variant="ghost"
             className="create-ticket__dismiss"
             data-testid="success-dismiss"
-            onClick={() => setSuccess(null)}
+            onClick={dismissSuccess}
           >
             Dismiss
           </Button>
@@ -305,6 +385,15 @@ export function TicketForm({ onCancel }: TicketFormProps) {
           ))}
         </div>
       </fieldset>
+
+      <AttachmentUploadZone
+        files={attachmentFiles}
+        disabled={submitting}
+        selectionDisabled={success !== null}
+        onAddFiles={addAttachmentFiles}
+        onRemoveFile={removeAttachmentFile}
+        onRetryFile={retryAttachmentFile}
+      />
 
       <div className="create-ticket__actions">
         <Button

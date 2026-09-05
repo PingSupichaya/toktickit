@@ -45,6 +45,16 @@ export interface CreateTicketInput {
   requestedPriority: RequestedPriority;
 }
 
+export interface Attachment {
+  id: number;
+  ticketId: number;
+  originalFilename: string;
+  fileSizeBytes: number;
+  contentType: string;
+  uploadedAt: string;
+  isRemoved: boolean;
+}
+
 export interface SystemStatus {
   online: boolean;
   categories: Category[];
@@ -123,4 +133,36 @@ export async function createTicket(input: CreateTicketInput): Promise<Ticket> {
   }
 
   return (body as DataResponse<Ticket>).data;
+}
+
+// AC-06 / FR-24 — upload an attachment to an existing ticket. Uses the
+// multipart/form-data contract of POST /api/tickets/:ticketId/attachments
+// (file + requesterId). Throws the server's safe message on failure.
+export async function uploadAttachment(
+  ticketId: number,
+  requesterId: number,
+  file: File
+): Promise<Attachment> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("requesterId", String(requesterId));
+
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/attachments`, {
+    method: "POST",
+    body: form,
+  });
+
+  const body = (await res.json().catch(() => null)) as
+    | DataResponse<Attachment>
+    | { error?: { message?: string } }
+    | null;
+
+  if (!res.ok) {
+    const message =
+      (body as { error?: { message?: string } })?.error?.message ??
+      `Upload failed with status ${res.status}`;
+    throw new Error(message);
+  }
+
+  return (body as DataResponse<Attachment>).data;
 }

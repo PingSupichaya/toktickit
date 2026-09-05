@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import * as api from "../../src/api.js";
 import type { Ticket } from "../../src/api.js";
@@ -45,12 +45,23 @@ const createdTicket: Ticket = {
   updatedAt: "2026-09-04T10:30:00.000Z",
 };
 
+const uploadedAttachment = {
+  id: 103,
+  ticketId: 1,
+  originalFilename: "error-screenshot.png",
+  fileSizeBytes: 64,
+  contentType: "image/png",
+  uploadedAt: "2026-09-05T11:00:00.000Z",
+  isRemoved: false,
+};
+
 beforeEach(() => {
   localStorage.clear();
   vi.mocked(api.fetchRequesters).mockResolvedValue(activeRequesters);
   vi.mocked(api.fetchCategories).mockResolvedValue(categories);
   vi.mocked(api.fetchRelatedSystems).mockResolvedValue(relatedSystems);
   vi.mocked(api.createTicket).mockResolvedValue(createdTicket);
+  vi.mocked(api.uploadAttachment).mockResolvedValue(uploadedAttachment);
 });
 
 const user = userEvent.setup();
@@ -223,5 +234,111 @@ describe("CreateTicketForm (T-009 / T-010)", () => {
       "My corporate laptop battery drains very quickly, lasting only 2 hours."
     );
     expect(screen.getByTestId("submit-btn")).toBeEnabled();
+  });
+
+  it("renders the attachment upload zone and lists selected files (ui-spec 12.2 #7)", async () => {
+    await openCreateTicket();
+    expect(await screen.findByTestId("attachment-input")).toBeInTheDocument();
+    expect(screen.getByText("JPG, PNG, WEBP, PDF (max 5 MB)")).toBeInTheDocument();
+
+    await user.upload(screen.getByTestId("attachment-input"), [
+      new File(["x"], "error-screenshot.png", { type: "image/png" }),
+      new File(["y"], "guide.pdf", { type: "application/pdf" }),
+    ]);
+
+    expect(screen.getByText("error-screenshot.png")).toBeInTheDocument();
+    expect(screen.getByText("guide.pdf")).toBeInTheDocument();
+    expect(screen.getAllByTestId(/^attachment-row-/)).toHaveLength(2);
+
+    // Attachments are optional: the submit button only needs the other fields.
+    expect(screen.getByTestId("submit-btn")).toBeDisabled();
+    await fillValidForm();
+    expect(screen.getByTestId("submit-btn")).toBeEnabled();
+  });
+
+  it("rejects disallowed file types and oversized files before upload (BR-12 / BR-13)", async () => {
+    await openCreateTicket();
+    const input = await screen.findByTestId("attachment-input");
+
+    // fireEvent bypasses the accept-attribute filter (as OS file dialogs do);
+    // the validation logic must still reject the file.
+    fireEvent.change(input, {
+      target: {
+        files: [new File(["hello"], "notes.txt", { type: "text/plain" })],
+      },
+    });
+    expect(await screen.findByTestId("attachment-error")).toHaveTextContent(
+      "notes.txt is not an allowed file type"
+    );
+    expect(screen.queryByText("notes.txt")).not.toBeInTheDocument();
+
+    const oversized = new File(
+      [new Uint8Array(5 * 1024 * 1024 + 1)],
+      "huge.pdf",
+      { type: "application/pdf" }
+    );
+    fireEvent.change(input, { target: { files: [oversized] } });
+    expect(await screen.findByTestId("attachment-error")).toHaveTextContent(
+      "huge.pdf exceeds the 5 MB limit"
+    );
+    expect(screen.queryByText("huge.pdf")).not.toBeInTheDocument();
+  });
+
+  it("allows at most 5 attachments and replaces the zone with a maximum message (BR-14)", async () => {
+    await openCreateTicket();
+    const input = await screen.findByTestId("attachment-input");
+
+    await user.upload(
+      input,
+      Array.from(
+        { length: 5 },
+        (_, i) =>
+          new File(["a"], `evidence-${i + 1}.png`, { type: "image/png" })
+      )
+    );
+
+    expect(screen.getAllByTestId(/^attachment-row-/)).toHaveLength(5);
+    expect(await screen.findByTestId("attachment-max")).toBeInTheDocument();
+    expect(screen.getByText("Maximum 5 attachments reached")).toBeInTheDocument();
+    expect(screen.queryByTestId("attachment-input")).not.toBeInTheDocument();
+  });
+
+  it("uploads selected files to the created ticket and lets a failed upload be retried (FR-30)", async () => {
+    const png = new File(["abc"], "error-screenshot.png", { type: "image/png" });
+    vi.mocked(api.uploadAttachment)
+      .mockRejectedValueOnce(new Error("Upload failed. Try again."))
+      .mockResolvedValueOnce(uploadedAttachment);
+
+    await openCreateTicket();
+    await waitFor(() => {
+      expect(screen.getByTestId("category-select")).toBeInTheDocument();
+    });
+    await fillValidForm();
+    await user.upload(screen.getByTestId("attachment-input"), png);
+    await user.click(screen.getByTestId("submit-btn"));
+
+    // Ticket creation succeeds, then the attachment upload attempt fails.
+    expect(await screen.findByTestId("success-banner")).toHaveTextContent(
+      "Ticket TKT-000001 created successfully."
+    );
+    expect(await screen.findByText("Upload failed. Try again.")).toBeInTheDocument();
+
+    // Retry re-uploads the same file to the same ticket.
+    const retry = screen.getAllByRole("button", { name: /^Retry/ })[0];
+    await user.click(retry);
+
+    expect(await screen.findByText("Uploaded")).toBeInTheDocument();
+    expect(api.uploadAttachment).toHaveBeenCalledWith(1, 1, png);
+    expect(api.uploadAttachment).toHaveBeenCalledTimes(2);
+
+    // While the success banner is up, picking files for a NEW ticket is blocked.
+    expect(screen.getByTestId("attachment-input")).toBeDisabled();
+
+    // Dismiss clears the previous ticket's rows and re-enables selection.
+    await user.click(screen.getByTestId("success-dismiss"));
+    await waitFor(() => {
+      expect(screen.queryAllByTestId(/^attachment-row-/)).toHaveLength(0);
+    });
+    expect(screen.getByTestId("attachment-input")).toBeEnabled();
   });
 });

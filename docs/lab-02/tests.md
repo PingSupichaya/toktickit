@@ -46,8 +46,8 @@ The table below is the authoritative test inventory. **Type** values: `Unit`, `A
 | T-006 | API | AC-04 / BR-09 | Summary with leading/trailing spaces is trimmed before validation | 201; stored summary is trimmed value | `tests/lab-02/ticket-detail.api.test.ts` | Pending |
 | T-007 | API | AC-04 / BR-08,11 | `POST /api/tickets` with invalid categoryId, relatedSystemId, and priority enum | 400 or 404; appropriate error for each invalid field | `tests/lab-02/ticket-detail.api.test.ts` | Pending |
 | T-008 | API | AC-04 / BR-05 | `POST /api/tickets` with inactive requesterId | 400 or 403; requester inactive error | `tests/lab-02/ticket-detail.api.test.ts` | Pending |
-| T-009 | UI  | AC-04 | Submit disabled when required fields empty; inline error on blur; error clears on correction; form preserved after 500 | Button disabled; error shown below field; error gone after fix; field values retained after server error | `client/tests/lab-02/CreateTicketForm.test.tsx` | Pending |
-| T-010 | UI  | AC-01 | Success banner shown after ticket created | Banner "Ticket created successfully" visible | `client/tests/lab-02/CreateTicketForm.test.tsx` | Pending |
+| T-009 | UI  | AC-04 | Submit disabled when required fields empty; inline error on blur; error clears on correction; form preserved after 500 | Button disabled; error shown below field; error gone after fix; field values retained after server error | `client/tests/lab-02/CreateTicketForm.test.tsx` | Pass |
+| T-010 | UI  | AC-01 | Success banner shown after ticket created | Banner "Ticket created successfully" visible | `client/tests/lab-02/CreateTicketForm.test.tsx` | Pass |
 | T-011 | API | AC-05 / BR-04 | `GET /api/tickets?requesterId=1` returns only that requester's tickets with default sort | All records have requesterId=1; ordered newest first | `tests/lab-02/ticket-detail.api.test.ts` | Pending |
 | T-012 | API | AC-08 | Search (case-insensitive), filter (category + priority AND), sort (ticketDate asc), and pagination (page 2, size 10) | Results match search term; match all filters; correct order; correct page slice and metadata | `tests/lab-02/ticket-detail.api.test.ts` | Pending |
 | T-013 | API | AC-08 | Invalid pageSize defaults to 10 | Response uses pageSize=10 | `tests/lab-02/ticket-detail.api.test.ts` | Pending |
@@ -62,6 +62,7 @@ The table below is the authoritative test inventory. **Type** values: `Unit`, `A
 | T-022 | API | §7 Seed Data / BR-05 | Seed creates required reference data (4 Categories, ≥6 active Related Systems, ≥4 active Requesters + ≥1 inactive Requester), is idempotent (re-run creates no duplicates), and `GET /api/categories` + `GET /api/related-systems` return active records only | Seeded counts match spec; re-running seed keeps counts identical; 200 with only active records | `tests/lab-02/seed.test.ts` | Pending |
 | T-023 | E2E | AC-01–AC-08 | Full workflow: select requester → create ticket → view detail → upload attachment | Ticket Detail shows correct data; attachment visible; Playwright screenshot saved | `e2e/lab-02/createTicket.spec.ts` | Pending |
 | T-024 | E2E | AC-07 | Attachment lifecycle: upload → soft-remove → confirm metadata visible; download blocked | Removed item shown in muted style; download returns error; screenshot saved | `e2e/lab-02/attachments.spec.ts` | Pending |
+| T-026 | UI  | AC-06 / BR-12,13,14 | Create Ticket form rejects disallowed/oversized files, enforces the 5-attachment limit, and uploads selected files to the created ticket with retry on failure | Invalid files rejected inline; max 5 enforced; files uploaded after ticket creation; failed upload retryable | `client/tests/lab-02/CreateTicketForm.test.tsx` | Pass |
 | T-025 | E2E | AC-03 | Ownership block: Requester B cannot open Requester A's ticket | 403 error screen shown; screenshot saved | `e2e/lab-02/ownership.spec.ts` | Pending |
 
 ---
@@ -77,7 +78,7 @@ The AC IDs below match exactly the Acceptance Criteria defined in `specification
 | AC-03 | Ticket ownership enforced across requesters | T-015, T-016, T-025 |
 | AC-04 | Invalid ticket data rejected with inline errors | T-005, T-006, T-007, T-008, T-009 |
 | AC-05 | My Tickets shows only current requester's tickets | T-011, T-014 |
-| AC-06 | Attachment upload enforces type and size limits | T-017, T-018, T-019, T-023 |
+| AC-06 | Attachment upload enforces type and size limits | T-017, T-018, T-019, T-023, T-026 |
 | AC-07 | Soft removal marks attachment inaccessible; metadata stays visible | T-019, T-020, T-021, T-024 |
 | AC-08 | Pagination and search work together | T-012, T-013 |
 
