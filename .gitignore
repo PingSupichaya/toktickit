@@ -9,8 +9,6 @@ dist/
 build/
 # prisma
 server/prisma/*.db
-# uploaded attachment files
-server/uploads/
 # logs & OS
 *.log
 .DS_Store
