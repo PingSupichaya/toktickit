@@ -15,6 +15,19 @@ const activeRequesters = [
 beforeEach(() => {
   localStorage.clear();
   vi.mocked(api.fetchRequesters).mockResolvedValue(activeRequesters);
+  vi.mocked(api.fetchCategories).mockResolvedValue([]);
+  vi.mocked(api.fetchRelatedSystems).mockResolvedValue([]);
+  vi.mocked(api.fetchTickets).mockResolvedValue({
+    items: [],
+    pagination: {
+      page: 1,
+      pageSize: 10,
+      totalCount: 0,
+      totalPages: 1,
+      hasNextPage: false,
+      hasPreviousPage: false,
+    },
+  });
 });
 
 describe("RequesterSelector (T-002 / T-003)", () => {

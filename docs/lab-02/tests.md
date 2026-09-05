@@ -38,31 +38,32 @@ The table below is the authoritative test inventory. **Type** values: `Unit`, `A
 
 | Test ID | Type | Requirement / AC | What It Tests | Expected Result | Automated Test File | Status |
 |---------|------|-----------------|---------------|-----------------|---------------------|--------|
-| T-001 | API | AC-02 / BR-05 | `GET /api/requesters` returns only active requesters (inactive excluded) and handles database errors with a 500 structured error | 200; active records only; inactive requester absent; 500 + `INTERNAL_SERVER_ERROR` on DB failure | `tests/lab-02/requesters.api.test.ts` | Pending |
-| T-002 | UI  | AC-02 | Requester selector populates, persists selection in localStorage, and shows name in header | Dropdown shows active requesters; header shows selected name after reload | `client/tests/lab-02/RequesterSelector.test.tsx` | Pending |
-| T-003 | UI  | AC-02 | Switching requester reloads ticket context for new requester; selection persisted/restored via localStorage | New requester shown; previous requester's context/tickets not visible | `client/tests/lab-02/RequesterSelector.test.tsx`, `client/tests/lab-02/RequesterContext.test.tsx` | Pending |
-| T-004 | API | AC-01 / BR-01,02,06 | `POST /api/tickets` with all valid fields | 201; unique `ticketNumber` matches `TKT-\d{6}`; `currentStatus=NEW`; `ticketDate` set by backend | `tests/lab-02/ticket-detail.api.test.ts` | Pending |
-| T-005 | API | AC-04 / BR-09,10 | `POST /api/tickets` with summary < 10 chars and description > 2000 chars | 400; validation errors for both fields | `tests/lab-02/ticket-detail.api.test.ts` | Pending |
-| T-006 | API | AC-04 / BR-09 | Summary with leading/trailing spaces is trimmed before validation | 201; stored summary is trimmed value | `tests/lab-02/ticket-detail.api.test.ts` | Pending |
-| T-007 | API | AC-04 / BR-08,11 | `POST /api/tickets` with invalid categoryId, relatedSystemId, and priority enum | 400 or 404; appropriate error for each invalid field | `tests/lab-02/ticket-detail.api.test.ts` | Pending |
-| T-008 | API | AC-04 / BR-05 | `POST /api/tickets` with inactive requesterId | 400 or 403; requester inactive error | `tests/lab-02/ticket-detail.api.test.ts` | Pending |
-| T-009 | UI  | AC-04 | Submit disabled when required fields empty; inline error on blur; error clears on correction; form preserved after 500 | Button disabled; error shown below field; error gone after fix; field values retained after server error | `client/tests/lab-02/CreateTicketForm.test.tsx` | Pass |
-| T-010 | UI  | AC-01 | Success banner shown after ticket created | Banner "Ticket created successfully" visible | `client/tests/lab-02/CreateTicketForm.test.tsx` | Pass |
-| T-011 | API | AC-05 / BR-04 | `GET /api/tickets?requesterId=1` returns only that requester's tickets with default sort | All records have requesterId=1; ordered newest first | `tests/lab-02/ticket-detail.api.test.ts` | Pending |
-| T-012 | API | AC-08 | Search (case-insensitive), filter (category + priority AND), sort (ticketDate asc), and pagination (page 2, size 10) | Results match search term; match all filters; correct order; correct page slice and metadata | `tests/lab-02/ticket-detail.api.test.ts` | Pending |
-| T-013 | API | AC-08 | Invalid pageSize defaults to 10 | Response uses pageSize=10 | `tests/lab-02/ticket-detail.api.test.ts` | Pending |
-| T-014 | UI  | AC-05 | My Tickets shows only current requester's tickets; empty state when no tickets; loading state | No other requester's data; empty state with CTA; skeleton rendered during fetch | `client/tests/lab-02/MyTickets.test.tsx` | Pending |
-| T-015 | API | AC-03 / BR-04 | `GET /api/tickets/:id` owned ticket returns full detail; wrong requesterId returns 403; non-existent returns 404 | 200 with all fields + attachments; 403 ownership error; 404 not found | `tests/lab-02/ticket-detail.api.test.ts` | Pending |
-| T-016 | UI  | AC-03 | Ticket Detail renders all fields read-only; 403 shows error state with Back button | No editable inputs; error screen displayed with navigation | `client/tests/lab-02/TicketDetail.test.tsx` | Pending |
-| T-017 | API | AC-06 / BR-12,13,14 | Upload valid file (JPEG); invalid type (.txt); oversized (>5 MB); exceeds 5-attachment limit; wrong owner | 201 with metadata; 415; 413; 409; 403 respectively | `tests/lab-02/attachments.api.test.ts` | Pending |
-| T-018 | Unit | AC-06 / BR-27 | Filename sanitisation — path-traversal name rejected | Stored filename is UUID-based; originalFilename preserved in DB | `tests/lab-02/attachments.api.test.ts` | Pending |
-| T-019 | API | AC-06 | Download owned active attachment; download with wrong owner; download removed attachment | 200 binary; 403 ownership; 403 removed | `tests/lab-02/attachments.api.test.ts` | Pending |
-| T-020 | API | AC-07 / BR-15,16 | Soft-remove owned attachment; verify metadata visible with includeRemoved=true; re-remove returns 409; wrong owner returns 403 | 200 isRemoved=true; full list includes removed record; 409; 403 | `tests/lab-02/attachments.api.test.ts` | Pending |
-| T-021 | UI  | AC-07 | Remove confirmation modal; count decreases; removed item visible in muted style with no download link | Modal renders; active count drops; muted item present | `client/tests/lab-02/AttachmentList.test.tsx` | Pending |
-| T-022 | API | §7 Seed Data / BR-05 | Seed creates required reference data (4 Categories, ≥6 active Related Systems, ≥4 active Requesters + ≥1 inactive Requester), is idempotent (re-run creates no duplicates), and `GET /api/categories` + `GET /api/related-systems` return active records only | Seeded counts match spec; re-running seed keeps counts identical; 200 with only active records | `tests/lab-02/seed.test.ts` | Pending |
+| T-001 | API | AC-02 / BR-05 | `GET /api/requesters` returns only active requesters (inactive excluded) and handles database errors with a 500 structured error | 200; active records only; inactive requester absent; 500 + `INTERNAL_SERVER_ERROR` on DB failure | `tests/lab-02/requesters.api.test.ts` | Pass |
+| T-002 | UI  | AC-02 | Requester selector populates, persists selection in localStorage, and shows name in header | Dropdown shows active requesters; header shows selected name after reload | `client/tests/lab-02/RequesterSelector.test.tsx` | Pass |
+| T-003 | UI  | AC-02 | Switching requester reloads ticket context for new requester; selection persisted/restored via localStorage | New requester shown; previous requester's context/tickets not visible | `client/tests/lab-02/RequesterSelector.test.tsx`, `client/tests/lab-02/RequesterContext.test.tsx` | Pass |
+| T-004 | API | AC-01 / BR-01,02,06 | `POST /api/tickets` with all valid fields | 201; unique `ticketNumber` matches `TKT-\d{6}`; `currentStatus=NEW`; `ticketDate` set by backend | `tests/lab-02/create-ticket.api.test.ts` | Pass |
+| T-005 | API | AC-04 / BR-09,10 | `POST /api/tickets` with summary < 10 chars and description > 2000 chars | 400; validation errors for both fields | `tests/lab-02/create-ticket.api.test.ts` | Pass |
+| T-006 | API | AC-04 / BR-09 | Summary with leading/trailing spaces is trimmed before validation | 201; stored summary is trimmed value | `tests/lab-02/create-ticket.api.test.ts` | Pass |
+| T-007 | API | AC-04 / BR-08,11 | `POST /api/tickets` with invalid categoryId, relatedSystemId, and priority enum | 400 or 404; appropriate error for each invalid field | `tests/lab-02/create-ticket.api.test.ts` | Pass |
+| T-008 | API | AC-04 / BR-05 | `POST /api/tickets` with inactive requesterId | 400 or 403; requester inactive error | `tests/lab-02/create-ticket.api.test.ts` | Pass |
+| T-009 | UI  | AC-04 | Submit disabled when required fields empty; inline error on blur; error clears on correction; form preserved after 500 | Button disabled; error shown below field; error gone after fix; field values retained after server error | `client/tests/lab-02/CreateTicket.test.tsx` | Pass |
+| T-010 | UI  | AC-01 | Success banner shown after ticket created | Banner "Ticket created successfully" visible | `client/tests/lab-02/CreateTicket.test.tsx` | Pass |
+| T-011 | API | AC-05 / BR-04 | `GET /api/tickets?requesterId=1` returns only that requester's tickets with default sort | All records have requesterId=1; ordered newest first | `tests/lab-02/my-tickets.api.test.ts` | Pass |
+| T-012 | API | AC-08 | Search (case-insensitive), filter (category + priority AND), sort (ticketDate asc), and pagination (page 2, size 10) | Results match search term; match all filters; correct order; correct page slice and metadata | `tests/lab-02/my-tickets.api.test.ts` | Pass |
+| T-013 | API | AC-08 | Invalid pageSize defaults to 10 | Response uses pageSize=10 | `tests/lab-02/my-tickets.api.test.ts` | Pass |
+| T-014 | UI  | AC-05 | My Tickets shows only current requester's tickets; empty state when no tickets; loading state | No other requester's data; empty state with CTA; skeleton rendered during fetch | `client/tests/lab-02/MyTickets.test.tsx` | Pass |
+| T-027 | UI  | AC-08 / AC-05 | My Tickets toolbar: debounced search, Category/Related System/Status/Priority filters, sort, pagination, Clear Filters, No Results state, empty-state CTA to Create Ticket | Refetch carries debounced search term + filter params + sort + page/size; "No Results" state with Clear Filters; Clear Filters hidden when only sort is active; "No Tickets Yet" CTA navigates to Create Ticket | `client/tests/lab-02/MyTickets.test.tsx` | Pass |
+| T-015 | API | AC-03 / BR-04 | `GET /api/tickets/:id` owned ticket returns full detail; wrong requesterId returns 403; non-existent returns 404 | 200 with all fields + attachments; 403 ownership error; 404 not found | `tests/lab-02/ticket-detail.api.test.ts` | Pass |
+| T-016 | UI  | AC-03 | Ticket Detail renders all fields read-only; 403 shows error state with Back button | No editable inputs; error screen displayed with navigation | `client/tests/lab-02/RequesterTicketDetail.test.tsx` | Pass |
+| T-017 | API | AC-06 / BR-12,13,14 | Upload valid file (JPEG); invalid type (.txt); oversized (>5 MB); exceeds 5-attachment limit; wrong owner | 201 with metadata; 415; 413; 409; 403 respectively | `tests/lab-02/attachments.api.test.ts` | Pass |
+| T-018 | Unit | AC-06 / BR-27 | Filename sanitisation — path-traversal name rejected | Stored filename is UUID-based; originalFilename preserved in DB | `tests/lab-02/attachments.api.test.ts` | Pass |
+| T-019 | API | AC-06 | Download owned active attachment; download with wrong owner; download removed attachment | 200 binary; 403 ownership; 403 removed | `tests/lab-02/attachments.api.test.ts` | Pass |
+| T-020 | API | AC-07 / BR-15,16 | Soft-remove owned attachment; verify metadata visible with includeRemoved=true; re-remove returns 409; wrong owner returns 403 | 200 isRemoved=true; full list includes removed record; 409; 403 | `tests/lab-02/attachments.api.test.ts` | Pass |
+| T-021 | UI  | AC-07 | Remove confirmation modal; count decreases; removed item visible in muted style with no download link | Modal renders; active count drops; muted item present | `client/tests/lab-02/AttachmentSection.test.tsx` | Pass |
+| T-022 | API | §7 Seed Data / BR-05 | Seed creates required reference data (4 Categories, ≥6 active Related Systems, ≥4 active Requesters + ≥1 inactive Requester), is idempotent (re-run creates no duplicates), and `GET /api/categories` + `GET /api/related-systems` return active records only | Seeded counts match spec; re-running seed keeps counts identical; 200 with only active records | `tests/lab-02/seed.test.ts` | Pass |
 | T-023 | E2E | AC-01–AC-08 | Full workflow: select requester → create ticket → view detail → upload attachment | Ticket Detail shows correct data; attachment visible; Playwright screenshot saved | `e2e/lab-02/createTicket.spec.ts` | Pending |
 | T-024 | E2E | AC-07 | Attachment lifecycle: upload → soft-remove → confirm metadata visible; download blocked | Removed item shown in muted style; download returns error; screenshot saved | `e2e/lab-02/attachments.spec.ts` | Pending |
-| T-026 | UI  | AC-06 / BR-12,13,14 | Create Ticket form rejects disallowed/oversized files, enforces the 5-attachment limit, and uploads selected files to the created ticket with retry on failure | Invalid files rejected inline; max 5 enforced; files uploaded after ticket creation; failed upload retryable | `client/tests/lab-02/CreateTicketForm.test.tsx` | Pass |
+| T-026 | UI  | AC-06 / BR-12,13,14 | Create Ticket form rejects disallowed/oversized files, enforces the 5-attachment limit, and uploads selected files to the created ticket with retry on failure | Invalid files rejected inline; max 5 enforced; files uploaded after ticket creation; failed upload retryable | `client/tests/lab-02/CreateTicket.test.tsx` | Pass |
 | T-025 | E2E | AC-03 | Ownership block: Requester B cannot open Requester A's ticket | 403 error screen shown; screenshot saved | `e2e/lab-02/ownership.spec.ts` | Pending |
 
 ---
@@ -80,7 +81,7 @@ The AC IDs below match exactly the Acceptance Criteria defined in `specification
 | AC-05 | My Tickets shows only current requester's tickets | T-011, T-014 |
 | AC-06 | Attachment upload enforces type and size limits | T-017, T-018, T-019, T-023, T-026 |
 | AC-07 | Soft removal marks attachment inaccessible; metadata stays visible | T-019, T-020, T-021, T-024 |
-| AC-08 | Pagination and search work together | T-012, T-013 |
+| AC-08 | Pagination and search work together | T-012, T-013, T-027 |
 
 ---
 
@@ -159,11 +160,13 @@ _To be completed on the final `main` branch before submission._
 
 | Category | Total | Pass | Fail | Pending |
 |----------|-------|------|------|---------|
-| Unit | — | — | — | — |
-| API | — | — | — | — |
-| UI | — | — | — | — |
-| E2E | — | — | — | — |
-| **Total** | **25** | — | — | — |
+| Unit | 1 | 1 | 0 | 0 |
+| API | 14 | 14 | 0 | 0 |
+| UI | 9 | 9 | 0 | 0 |
+| E2E | 3 | 0 | 0 | 3 |
+| **Total** | **27** | **24** | **0** | **3** |
+
+Unit: T-018. API: T-001, T-004..T-008, T-011..T-013, T-015, T-017, T-019, T-020, T-022. UI: T-002, T-003, T-009, T-010, T-014, T-016, T-021, T-026, T-027. E2E Pending: T-023, T-024, T-025.
 
 ### Notes
 - Record actual counts once tests are implemented and run
