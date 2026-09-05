@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useRequester } from "../../context/RequesterContext.js";
 import { Button } from "../ui/Button.js";
 
-export type HeaderView = "my-tickets" | "create-ticket";
+export type HeaderView = "my-tickets" | "create-ticket" | "ticket-detail";
 
 interface AppHeaderProps {
   activeView: HeaderView;

@@ -159,18 +159,20 @@ export function AttachmentSection({
                   <span className="attachment-row__detail">
                     {formatBytes(attachment.fileSizeBytes)} ·{" "}
                     {formatTicketDate(attachment.uploadedAt)}
-                    {attachment.removalReason
-                      ? ` · Removed ${attachment.removedAt ? formatTicketDate(attachment.removedAt) : ""}`
-                      : ""}
                   </span>
-                </span>
-                <span className="attachment-row__status">
-                  <span className="badge badge--neutral">Removed</span>
+                  {attachment.removedAt && (
+                    <span className="attachment-row__removed-info">
+                      Removed {formatTicketDate(attachment.removedAt)}
+                    </span>
+                  )}
                   {attachment.removalReason && (
                     <span className="attachment-row__reason">
                       {attachment.removalReason}
                     </span>
                   )}
+                </span>
+                <span className="attachment-row__status">
+                  <span className="badge badge--neutral">Removed</span>
                 </span>
               </li>
             ) : (

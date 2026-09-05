@@ -1636,6 +1636,7 @@ button {
 
 .ticket-detail__card {
   margin-bottom: var(--space-6);
+  padding: var(--space-8);
 }
 
 .ticket-detail__grid {
@@ -1876,7 +1877,17 @@ button {
     white-space: normal;
   }
 
-  .attachment-row__reason {
+.attachment-row__removed-info {
+  font-size: 0.75rem;
+  color: var(--color-text-disabled);
+}
+
+.attachment-row--removed .attachment-row__reason {
+  text-align: left;
+  max-width: none;
+}
+
+.attachment-row__reason {
     text-align: left;
     max-width: none;
   }
