@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRequester } from "../../context/RequesterContext.js";
 import { Button } from "../ui/Button.js";
 
-export type HeaderView = "my-tickets" | "create-ticket";
+export type HeaderView = "my-tickets" | "create-ticket" | "ticket-detail";
 
 interface AppHeaderProps {
   activeView: HeaderView;
@@ -22,6 +22,22 @@ export function AppHeader({
 }: AppHeaderProps) {
   const { requester } = useRequester();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onKeyDown(e: globalThis.KeyboardEvent) {
+      if (e.key === "Escape") setMenuOpen(false);
+    }
+    function onResize() {
+      if (window.innerWidth >= 768) setMenuOpen(false);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("resize", onResize);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [menuOpen]);
 
   function navigate(view: HeaderView) {
     onNavigate(view);
@@ -87,6 +103,9 @@ export function AppHeader({
           role="dialog"
           aria-modal="true"
           aria-label="Navigation menu"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setMenuOpen(false);
+          }}
         >
           <button
             type="button"

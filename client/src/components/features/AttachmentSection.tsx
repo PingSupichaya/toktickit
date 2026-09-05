@@ -69,13 +69,17 @@ export function AttachmentSection({
 
   async function confirmRemove() {
     if (!pendingRemove) return;
+    if (!removalReason.trim()) {
+      setRemovalError("Reason is required before removing");
+      return;
+    }
     setRemovalBusy(true);
     setRemovalError(null);
     try {
       const updated = await removeAttachment(
         pendingRemove.id,
         requesterId,
-        removalReason.trim() || undefined
+        removalReason.trim()
       );
       setRows((prev) =>
         prev.map((a) =>
@@ -159,18 +163,20 @@ export function AttachmentSection({
                   <span className="attachment-row__detail">
                     {formatBytes(attachment.fileSizeBytes)} ·{" "}
                     {formatTicketDate(attachment.uploadedAt)}
-                    {attachment.removalReason
-                      ? ` · Removed ${attachment.removedAt ? formatTicketDate(attachment.removedAt) : ""}`
-                      : ""}
                   </span>
+                  {attachment.removedAt && (
+                    <span className="attachment-row__removed-info">
+                      Removed {formatTicketDate(attachment.removedAt)}
+                    </span>
+                  )}
+                  {attachment.removalReason && (
+                    <span className="attachment-row__reason">
+                      Reason: {attachment.removalReason}
+                    </span>
+                  )}
                 </span>
                 <span className="attachment-row__status">
                   <span className="badge badge--neutral">Removed</span>
-                  {attachment.removalReason && (
-                    <span className="attachment-row__reason">
-                      {attachment.removalReason}
-                    </span>
-                  )}
                 </span>
               </li>
             ) : (
@@ -266,7 +272,7 @@ export function AttachmentSection({
         </p>
         <div className="field">
           <label className="field__label" htmlFor="removal-reason">
-            Reason (optional)
+            Reason <span aria-hidden="true">*</span>
           </label>
           <input
             id="removal-reason"
@@ -274,6 +280,8 @@ export function AttachmentSection({
             data-testid="removal-reason"
             value={removalReason}
             maxLength={500}
+            required
+            aria-required="true"
             onChange={(e) => setRemovalReason(e.target.value)}
             placeholder="e.g. Wrong file uploaded"
           />
