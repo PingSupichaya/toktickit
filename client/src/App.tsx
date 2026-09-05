@@ -39,7 +39,7 @@ function Shell() {
       <div className="dev-banner" role="status">
         ⚠️ DEVELOPMENT MODE — Not Real Authentication
       </div>
-      <main className="container" style={{ padding: "var(--space-8) 0" }}>
+      <main className="container" style={{ padding: "var(--space-8) var(--space-6)" }}>
         {activeView === "create-ticket" ? (
           <div className="create-ticket-page">
             <h1 className="screen-title">Create Ticket</h1>
