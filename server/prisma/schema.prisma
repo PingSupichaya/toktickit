@@ -11,115 +11,16 @@ datasource db {
 }
 
 // ---------------------------------------------------------------------------
-// Lab 2 — Requester Ticketing System
+// Issue 3 — Create and seed IT request categories
+// Define a Category model with:
+//   id        Int      @id @default(autoincrement())
+//   name      String   @unique
+//   createdAt DateTime @default(now())
+// Then run:  npx prisma migrate dev --name init
+// TODO(Issue 3): add the Category model below.
 // ---------------------------------------------------------------------------
-
-enum RequestedPriority {
-  LOW
-  MEDIUM
-  HIGH
-}
-
-enum TicketStatus {
-  NEW
-}
-
-// ---------------------------------------------------------------------------
-// Reference data
-// ---------------------------------------------------------------------------
-
-model Category {
+model category {
   id        Int      @id @default(autoincrement())
   name      String   @unique
-  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
-
-  tickets   Ticket[]
-
-  @@map("category")
-}
-
-model RelatedSystem {
-  id       Int     @id @default(autoincrement())
-  name     String  @unique
-  isActive Boolean @default(true)
-
-  tickets  Ticket[]
-
-  @@map("related_system")
-}
-
-// ---------------------------------------------------------------------------
-// Requester (development selector — not real auth)
-// ---------------------------------------------------------------------------
-
-model Requester {
-  id        Int      @id @default(autoincrement())
-  name      String
-  email     String   @unique
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  tickets   Ticket[]
-
-  @@index([isActive])
-  @@map("requester")
-}
-
-// ---------------------------------------------------------------------------
-// Ticket
-// ---------------------------------------------------------------------------
-
-model Ticket {
-  id                Int               @id @default(autoincrement())
-  ticketNumber      String            @unique
-  requesterId       Int
-  categoryId        Int
-  relatedSystemId   Int
-  summary           String
-  description       String
-  requestedPriority RequestedPriority
-  currentStatus     TicketStatus      @default(NEW)
-  ticketDate        DateTime          @default(now())
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-
-  requester         Requester         @relation(fields: [requesterId], references: [id])
-  category          Category          @relation(fields: [categoryId], references: [id])
-  relatedSystem     RelatedSystem     @relation(fields: [relatedSystemId], references: [id])
-  attachments       Attachment[]
-
-  @@index([requesterId])
-  @@index([ticketDate])
-  @@index([requesterId, ticketDate])
-  @@index([currentStatus])
-  @@index([categoryId])
-  @@index([relatedSystemId])
-  @@map("ticket")
-}
-
-// ---------------------------------------------------------------------------
-// Attachment (soft-removal)
-// ---------------------------------------------------------------------------
-
-model Attachment {
-  id               Int       @id @default(autoincrement())
-  ticketId         Int
-  originalFilename String
-  storedFilename   String
-  fileSizeBytes    Int
-  contentType      String
-  uploadedAt       DateTime  @default(now())
-  isRemoved        Boolean   @default(false)
-  removedAt        DateTime?
-  removalReason    String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-
-  ticket           Ticket    @relation(fields: [ticketId], references: [id])
-
-  @@index([ticketId])
-  @@index([ticketId, isRemoved])
-  @@map("attachment")
 }
