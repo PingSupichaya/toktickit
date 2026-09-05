@@ -1,0 +1,14 @@
+{
+  "name": "toktickit",
+  "private": true,
+  "version": "1.0.0",
+  "description": "TokTickIT - Lab 2 ticketing system (E2E test runner at repo root)",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:report": "playwright test --reporter=html"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}

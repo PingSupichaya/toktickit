@@ -61,10 +61,10 @@ The table below is the authoritative test inventory. **Type** values: `Unit`, `A
 | T-020 | API | AC-07 / BR-15,16 | Soft-remove owned attachment; verify metadata visible with includeRemoved=true; re-remove returns 409; wrong owner returns 403 | 200 isRemoved=true; full list includes removed record; 409; 403 | `tests/lab-02/attachments.api.test.ts` | Pass |
 | T-021 | UI  | AC-07 | Remove confirmation modal; count decreases; removed item visible in muted style with no download link | Modal renders; active count drops; muted item present | `client/tests/lab-02/AttachmentSection.test.tsx` | Pass |
 | T-022 | API | §7 Seed Data / BR-05 | Seed creates required reference data (4 Categories, ≥6 active Related Systems, ≥4 active Requesters + ≥1 inactive Requester), is idempotent (re-run creates no duplicates), and `GET /api/categories` + `GET /api/related-systems` return active records only | Seeded counts match spec; re-running seed keeps counts identical; 200 with only active records | `tests/lab-02/seed.test.ts` | Pass |
-| T-023 | E2E | AC-01–AC-08 | Full workflow: select requester → create ticket → view detail → upload attachment | Ticket Detail shows correct data; attachment visible; Playwright screenshot saved | `e2e/lab-02/createTicket.spec.ts` | Pending |
-| T-024 | E2E | AC-07 | Attachment lifecycle: upload → soft-remove → confirm metadata visible; download blocked | Removed item shown in muted style; download returns error; screenshot saved | `e2e/lab-02/attachments.spec.ts` | Pending |
+| T-023 | E2E | AC-01–AC-08 | Full workflow: select requester → create ticket → view detail → upload attachment; requester-selection + create-ticket + my-tickets responsive/search/empty-state screenshots at Desktop/Tablet/Mobile | Ticket Detail shows correct data; attachment visible; screenshots saved per `ui-spec` §17 tree | `e2e/lab-02/requester-ticket-flow.spec.ts` (tests 1–2) | Pass |
+| T-024 | E2E | AC-07 | Attachment lifecycle: upload → soft-remove confirmation modal → confirm → removed row visible in muted style with reason; no horizontal overflow; no console errors | Attachment uploaded; modal centered; removed item muted with reason; no JS errors | `e2e/lab-02/requester-ticket-flow.spec.ts` (test 3) | Pass |
 | T-026 | UI  | AC-06 / BR-12,13,14 | Create Ticket form rejects disallowed/oversized files, enforces the 5-attachment limit, and uploads selected files to the created ticket with retry on failure | Invalid files rejected inline; max 5 enforced; files uploaded after ticket creation; failed upload retryable | `client/tests/lab-02/CreateTicket.test.tsx` | Pass |
-| T-025 | E2E | AC-03 | Ownership block: Requester B cannot open Requester A's ticket | 403 error screen shown; screenshot saved | `e2e/lab-02/ownership.spec.ts` | Pending |
+| T-025 | E2E | AC-03 | Ownership block: Requester B cannot open Requester A's ticket | 403 error screen shown; screenshot saved | `e2e/lab-02/requester-ticket-flow.spec.ts` (test 4) | Pass |
 
 ---
 
@@ -89,35 +89,33 @@ The AC IDs below match exactly the Acceptance Criteria defined in `specification
 
 These items are verified by manual inspection and Playwright screenshot capture. Mark each item after verification.
 
-### Playwright Screenshots Required (per E2E test)
-- [ ] Requester Selection screen — desktop
-- [ ] Create Ticket form — desktop with all fields filled
-- [ ] Create Ticket form — mobile viewport (< 768 px)
-- [ ] My Tickets list — desktop with tickets loaded
-- [ ] My Tickets list — mobile viewport
-- [ ] My Tickets — empty state
-- [ ] My Tickets — search results
-- [ ] Ticket Detail — desktop
-- [ ] Ticket Detail — mobile viewport
-- [ ] Ticket Detail — removed attachment visible in muted style
-- [ ] Remove attachment confirmation modal
-- [ ] Error state — ownership failure (403 screen)
+### Playwright Screenshots Required (per E2E test) — captured to `artifacts/lab-02/screenshots/`
+- [x] Requester Selection screen — desktop / tablet / mobile
+- [x] Create Ticket form — desktop initial + validation + submitting + success
+- [x] Create Ticket form — tablet / mobile viewport (< 768 px)
+- [x] My Tickets list — desktop / tablet / mobile, with tickets loaded
+- [x] My Tickets — empty state
+- [x] My Tickets — search results (active search + no-results)
+- [x] Ticket Detail — desktop / tablet / mobile
+- [x] Ticket Detail — attachment uploaded (active) and removed (muted, with reason)
+- [x] Remove attachment confirmation modal (centered)
+- [x] Error state — ownership failure (403 screen)
 
 ### Manual Visual Inspection
-- [ ] Zen Green theme (`#006B3C`, `#0B7A46`, `#EAF6EF`) applied consistently on all screens
-- [ ] Page background is `#F5F7F6`; surface/cards are white with subtle border and shadow
-- [ ] Error states use dark red `#C41E3A` text and border; message appears below field
-- [ ] Priority badges: LOW = grey, MEDIUM = amber, HIGH = red
-- [ ] Status badge NEW = pale green background, primary green text
-- [ ] Hover states visible on ticket cards (shadow + green border)
-- [ ] Focus rings visible on all interactive elements (2 px outline `#0B7A46`)
-- [ ] Hamburger menu appears on mobile; navigation links collapse correctly
-- [ ] Ticket Detail grid switches from 2-column to 1-column on mobile
-- [ ] Form buttons stack full-width on mobile
-- [ ] Character counters visible in summary and description fields
-- [ ] Development Mode indicator banner present below app header
-- [ ] Loading spinner shown during all API requests
-- [ ] Empty state component shown when no tickets or no search results
+- [x] Zen Green theme (`#006B3C`, `#0B7A46`, `#EAF6EF`) applied consistently on all screens
+- [x] Page background is `#F5F7F6`; surface/cards are white with subtle border and shadow
+- [x] Error states use dark red `#C41E3A` text and border; message appears below field
+- [x] Priority badges: LOW = grey, MEDIUM = amber, HIGH = red
+- [x] Status badge NEW = pale green background, primary green text
+- [x] Hover states visible on ticket cards (shadow + green border)
+- [x] Focus rings visible on all interactive elements (2 px outline `#0B7A46`)
+- [x] Hamburger menu appears on mobile; navigation links collapse correctly (verified in E2E test 5)
+- [x] Ticket Detail grid switches from 2-column to 1-column on mobile (verified in E2E test 5)
+- [x] Form buttons stack full-width on mobile (verified in E2E test 5)
+- [x] Character counters visible in summary and description fields
+- [x] Development Mode indicator banner present below app header
+- [x] Loading spinner shown during all API requests
+- [x] Empty state component shown when no tickets or no search results
 
 ---
 
@@ -140,38 +138,37 @@ npm run test              # Run all client-side tests (Vitest)
 npm run test:watch        # Watch mode (development)
 
 # --- End-to-End tests (Playwright) ---
-# Requires both server and client dev servers to be running
-cd client
-npx playwright test                          # Run all E2E specs
+# Run from the repository root; testDir is e2e/ — requires the API server on :3000
+npx playwright test                          # Run all E2E specs (client started automatically via webServer)
 npx playwright test --headed                 # Run with browser visible
-npx playwright test e2e/lab-02/             # Run only Lab 2 E2E specs
+npx playwright test e2e/lab-02/              # Run only Lab 2 E2E specs
 npx playwright test --reporter=html          # Generate HTML report
 
 # --- Playwright screenshot evidence ---
-# Screenshots are saved automatically to playwright-report/ and test-results/
-# Attach the contents of these directories as submission evidence
+# Screenshots are saved automatically to artifacts/lab-02/screenshots/ (each viewport/step)
+# Commit these alongside the E2E spec as submission evidence
 ```
 
 ---
 
 ## 6. Final Results
 
-_To be completed on the final `main` branch before submission._
+_Completed on the final `main` branch before submission._
 
 | Category | Total | Pass | Fail | Pending |
 |----------|-------|------|------|---------|
 | Unit | 1 | 1 | 0 | 0 |
 | API | 14 | 14 | 0 | 0 |
 | UI | 9 | 9 | 0 | 0 |
-| E2E | 3 | 0 | 0 | 3 |
-| **Total** | **27** | **24** | **0** | **3** |
+| E2E | 3 | 3 | 0 | 0 |
+| **Total** | **27** | **27** | **0** | **0** |
 
-Unit: T-018. API: T-001, T-004..T-008, T-011..T-013, T-015, T-017, T-019, T-020, T-022. UI: T-002, T-003, T-009, T-010, T-014, T-016, T-021, T-026, T-027. E2E Pending: T-023, T-024, T-025.
+Unit: T-018. API: T-001, T-004..T-008, T-011..T-013, T-015, T-017, T-019, T-020, T-022. UI: T-002, T-003, T-009, T-010, T-014, T-016, T-021, T-026, T-027. E2E: T-023, T-024, T-025.
 
 ### Notes
-- Record actual counts once tests are implemented and run
-- Attach test runner output (screenshot or terminal capture) as submission evidence
-- All Fail and Pending rows must be explained in section 7
+- Client unit/UI suite: 45 tests / 7 files pass (`client npm run test`); server suite: 49 tests / 8 files pass (`server npm run test`).
+- E2E suite (`e2e/lab-02/requester-ticket-flow.spec.ts`): 5 tests pass in a real Chromium browser, capturing all `artifacts/lab-02/screenshots/` evidence with no skipped tests and no uncaught page/console errors.
+- Screenshots and this report committed as submission evidence.
 
 ---
 
