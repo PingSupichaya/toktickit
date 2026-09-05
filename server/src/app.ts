@@ -1,11 +1,41 @@
-import express, { Request, Response } from "express";
+import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
+import fs from "node:fs";
+import path from "node:path";
+import multer from "multer";
 import { Prisma, RequestedPriority, TicketStatus } from "@prisma/client";
 import { getPrisma } from "./prisma.js";
+import {
+  ALLOWED_MIME_TYPES,
+  MAX_ATTACHMENTS,
+  MAX_FILE_SIZE,
+  UPLOAD_DIR,
+  sanitizeOriginalFilename,
+  storeFileBuffer,
+  deleteStoredFile,
+} from "./attachmentFiles.js";
 
 const PRIORITIES: RequestedPriority[] = ["LOW", "MEDIUM", "HIGH"];
 const STATUSES: TicketStatus[] = ["NEW"];
 const PAGE_SIZES = [10, 25, 50];
+
+// Attachment upload helper (AC-06/FR-24/BR-13). Files are buffered in memory
+// and written to server/uploads only after all validation has passed.
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_FILE_SIZE, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
+      const err = new Error("Only JPG, PNG, WEBP, and PDF files are allowed") as Error & {
+        code: string;
+      };
+      err.code = "INVALID_FILE_TYPE";
+      cb(err);
+    } else {
+      cb(null, true);
+    }
+  },
+});
 
 // The Express app is exported separately from app.listen() (see index.ts) so
 // Supertest can import `app` without opening a port. Do not merge these files.
@@ -397,7 +427,19 @@ app.get("/api/tickets/:ticketId", async (req: Request, res: Response) => {
         requester: { select: { id: true, name: true, email: true } },
         category: { select: { id: true, name: true } },
         relatedSystem: { select: { id: true, name: true } },
-        attachments: { orderBy: { id: "asc" } },
+        attachments: {
+          orderBy: { id: "asc" },
+          select: {
+            id: true,
+            originalFilename: true,
+            fileSizeBytes: true,
+            contentType: true,
+            uploadedAt: true,
+            isRemoved: true,
+            removedAt: true,
+            removalReason: true,
+          },
+        },
       },
     });
 
@@ -427,5 +469,409 @@ app.get("/api/tickets/:ticketId", async (req: Request, res: Response) => {
     });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Upload Attachment (AC-06 / BR-12,13,14)
+// POST /api/tickets/:ticketId/attachments (multipart/form-data)
+//   fields: file (required), requesterId (required)
+// Validates MIME type, size (<= 5 MB), ticket ownership, and the active
+// five-attachment limit. The stored name is a UUID; the original filename is
+// preserved for display. 201 with attachment metadata.
+// ---------------------------------------------------------------------------
+app.post(
+  "/api/tickets/:ticketId/attachments",
+  upload.single("file"),
+  async (req: Request, res: Response) => {
+    try {
+      const body = req.body ?? {};
+
+      if (!req.file) {
+        res.status(400).json({
+          error: { message: "No file provided", code: "MISSING_FILE" },
+        });
+        return;
+      }
+
+      const requesterId = Number(body.requesterId);
+      if (body.requesterId === undefined || !Number.isInteger(requesterId) || requesterId <= 0) {
+        res.status(400).json({
+          error: { message: "Requester ID is required", code: "MISSING_REQUESTER_ID" },
+        });
+        return;
+      }
+
+      const detailRefs = await resolveTicketForRoute(
+        req,
+        res,
+        requesterId,
+        "You do not have permission to add attachments to this ticket"
+      );
+      if (!detailRefs) return;
+
+      const activeCount = await getPrisma().attachment.count({
+        where: { ticketId: detailRefs.ticketId, isRemoved: false },
+      });
+      if (activeCount >= MAX_ATTACHMENTS) {
+        res.status(409).json({
+          error: { message: "Maximum 5 attachments per ticket", code: "MAX_ATTACHMENTS_REACHED" },
+        });
+        return;
+      }
+
+      const originalFilename = sanitizeOriginalFilename(req.file.originalname);
+      const storedFilename = await storeFileBuffer(req.file.buffer, req.file.mimetype);
+
+      let attachment;
+      try {
+        attachment = await getPrisma().attachment.create({
+          data: {
+            ticketId: detailRefs.ticketId,
+            originalFilename,
+            storedFilename,
+            fileSizeBytes: req.file.size,
+            contentType: req.file.mimetype,
+          },
+        });
+      } catch (err) {
+        await deleteStoredFile(storedFilename);
+        throw err;
+      }
+
+      res.status(201).json({
+        data: {
+          id: attachment.id,
+          ticketId: attachment.ticketId,
+          originalFilename: attachment.originalFilename,
+          fileSizeBytes: attachment.fileSizeBytes,
+          contentType: attachment.contentType,
+          uploadedAt: attachment.uploadedAt,
+          isRemoved: attachment.isRemoved,
+        },
+      });
+    } catch (err) {
+      console.error("Failed to upload attachment:", err);
+      res.status(500).json({
+        error: { message: "Failed to upload attachment", code: "INTERNAL_SERVER_ERROR" },
+      });
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Get Attachment Metadata (AC-06 / AC-07)
+// GET /api/tickets/:ticketId/attachments?requesterId=:id[&includeRemoved=true]
+// Returns attachment metadata for the owner's ticket; soft-removed records are
+// hidden by default and shown only when includeRemoved=true.
+// ---------------------------------------------------------------------------
+app.get("/api/tickets/:ticketId/attachments", async (req: Request, res: Response) => {
+  try {
+    const requesterId = Number(req.query.requesterId);
+    if (req.query.requesterId === undefined || !Number.isInteger(requesterId) || requesterId <= 0) {
+      res.status(400).json({
+        error: { message: "Requester ID is required", code: "MISSING_REQUESTER_ID" },
+      });
+      return;
+    }
+
+    const detailRefs = await resolveTicketForRoute(
+      req,
+      res,
+      requesterId,
+      "You do not have permission to view these attachments"
+    );
+    if (!detailRefs) return;
+
+    const includeRemoved = req.query.includeRemoved === "true";
+
+    const attachments = await getPrisma().attachment.findMany({
+      where: {
+        ticketId: detailRefs.ticketId,
+        ...(includeRemoved ? {} : { isRemoved: false }),
+      },
+      orderBy: { id: "asc" },
+      select: {
+        id: true,
+        originalFilename: true,
+        fileSizeBytes: true,
+        contentType: true,
+        uploadedAt: true,
+        isRemoved: true,
+        removedAt: true,
+        removalReason: true,
+      },
+    });
+
+    const data = attachments.map((a) => ({
+      id: a.id,
+      originalFilename: a.originalFilename,
+      fileSizeBytes: a.fileSizeBytes,
+      contentType: a.contentType,
+      uploadedAt: a.uploadedAt,
+      isRemoved: a.isRemoved,
+      ...(a.isRemoved ? { removedAt: a.removedAt, removalReason: a.removalReason } : {}),
+    }));
+
+    res.status(200).json({ data });
+  } catch (err) {
+    console.error("Failed to fetch attachments:", err);
+    res.status(500).json({
+      error: { message: "Failed to fetch attachments", code: "INTERNAL_SERVER_ERROR" },
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Download Attachment (AC-06 / BR-23)
+// GET /api/attachments/:attachmentId/download?requesterId=:id
+// Streams the stored file when owned and active. Removed attachments are not
+// downloadable (AC-07).
+// ---------------------------------------------------------------------------
+app.get("/api/attachments/:attachmentId/download", async (req: Request, res: Response) => {
+  try {
+    const requesterId = Number(req.query.requesterId);
+    if (req.query.requesterId === undefined || !Number.isInteger(requesterId) || requesterId <= 0) {
+      res.status(400).json({
+        error: { message: "Requester ID is required", code: "MISSING_REQUESTER_ID" },
+      });
+      return;
+    }
+
+    const attachmentId = Number(req.params.attachmentId);
+    if (!Number.isInteger(attachmentId) || attachmentId <= 0) {
+      res.status(404).json({
+        error: { message: "Attachment not found", code: "ATTACHMENT_NOT_FOUND" },
+      });
+      return;
+    }
+
+    const attachment = await getPrisma().attachment.findUnique({
+      where: { id: attachmentId },
+      include: { ticket: { select: { requesterId: true } } },
+    });
+
+    if (!attachment) {
+      res.status(404).json({
+        error: { message: "Attachment not found", code: "ATTACHMENT_NOT_FOUND" },
+      });
+      return;
+    }
+
+    if (attachment.ticket.requesterId !== requesterId) {
+      res.status(403).json({
+        error: {
+          message: "You do not have permission to download this attachment",
+          code: "FORBIDDEN",
+        },
+      });
+      return;
+    }
+
+    if (attachment.isRemoved) {
+      res.status(403).json({
+        error: {
+          message: "This attachment has been removed and cannot be downloaded",
+          code: "ATTACHMENT_REMOVED",
+        },
+      });
+      return;
+    }
+
+    const filePath = path.join(UPLOAD_DIR, attachment.storedFilename);
+    if (!fs.existsSync(filePath)) {
+      res.status(500).json({
+        error: { message: "Attachment file is missing", code: "FILE_NOT_FOUND" },
+      });
+      return;
+    }
+
+    res.setHeader("Content-Type", attachment.contentType);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${attachment.originalFilename.replace(/"/g, "'")}"`
+    );
+    res.setHeader("Content-Length", attachment.fileSizeBytes);
+    const stream = fs.createReadStream(filePath);
+    stream.on("error", () => {
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: { message: "Failed to read attachment", code: "INTERNAL_SERVER_ERROR" },
+        });
+      } else {
+        res.destroy();
+      }
+    });
+    stream.pipe(res);
+  } catch (err) {
+    console.error("Failed to download attachment:", err);
+    res.status(500).json({
+      error: { message: "Failed to download attachment", code: "INTERNAL_SERVER_ERROR" },
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Soft-Remove Attachment (AC-07 / BR-15,16)
+// DELETE /api/attachments/:attachmentId
+//   body: { requesterId (required), removalReason (optional, <= 500 chars) }
+// Marks isRemoved=true. The record (metadata) stays visible on the Ticket
+// Detail screen; the stored file remains on disk but is no longer downloadable.
+// ---------------------------------------------------------------------------
+app.delete("/api/attachments/:attachmentId", async (req: Request, res: Response) => {
+  try {
+    const body = req.body ?? {};
+    const requesterId = Number(body.requesterId);
+    if (body.requesterId === undefined || !Number.isInteger(requesterId) || requesterId <= 0) {
+      res.status(400).json({
+        error: { message: "Requester ID is required", code: "MISSING_REQUESTER_ID" },
+      });
+      return;
+    }
+
+    const removalReason =
+      typeof body.removalReason === "string" ? body.removalReason.trim() : "";
+    if (removalReason.length > 500) {
+      res.status(400).json({
+        error: {
+          message: "Validation failed",
+          code: "VALIDATION_ERROR",
+          details: { removalReason: "Removal reason must not exceed 500 characters" },
+        },
+      });
+      return;
+    }
+
+    const attachmentId = Number(req.params.attachmentId);
+    if (!Number.isInteger(attachmentId) || attachmentId <= 0) {
+      res.status(404).json({
+        error: { message: "Attachment not found", code: "ATTACHMENT_NOT_FOUND" },
+      });
+      return;
+    }
+
+    const attachment = await getPrisma().attachment.findUnique({
+      where: { id: attachmentId },
+      include: { ticket: { select: { requesterId: true } } },
+    });
+
+    if (!attachment) {
+      res.status(404).json({
+        error: { message: "Attachment not found", code: "ATTACHMENT_NOT_FOUND" },
+      });
+      return;
+    }
+
+    if (attachment.ticket.requesterId !== requesterId) {
+      res.status(403).json({
+        error: {
+          message: "You do not have permission to remove this attachment",
+          code: "FORBIDDEN",
+        },
+      });
+      return;
+    }
+
+    if (attachment.isRemoved) {
+      res.status(409).json({
+        error: { message: "Attachment is already removed", code: "ALREADY_REMOVED" },
+      });
+      return;
+    }
+
+    const updated = await getPrisma().attachment.update({
+      where: { id: attachmentId },
+      data: {
+        isRemoved: true,
+        removedAt: new Date(),
+        removalReason: removalReason === "" ? null : removalReason,
+      },
+    });
+
+    res.status(200).json({
+      data: {
+        id: updated.id,
+        isRemoved: updated.isRemoved,
+        removedAt: updated.removedAt,
+        removalReason: updated.removalReason,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to remove attachment:", err);
+    res.status(500).json({
+      error: { message: "Failed to remove attachment", code: "INTERNAL_SERVER_ERROR" },
+    });
+  }
+});
+
+// Resolves requester + ticket ownership for ticket-scoped attachment routes.
+// Responds with the correct error and returns null when the request is
+// rejected (404 TICKET_NOT_FOUND / 403 FORBIDDEN).
+async function resolveTicketForRoute(
+  req: Request,
+  res: Response,
+  requesterId: number,
+  forbiddenMessage: string
+): Promise<{ ticketId: number; requesterId: number } | null> {
+  const ticketId = Number(req.params.ticketId);
+  if (!Number.isInteger(ticketId) || ticketId <= 0) {
+    res.status(404).json({
+      error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
+    });
+    return null;
+  }
+
+  const ticket = await getPrisma().ticket.findUnique({
+    where: { id: ticketId },
+    select: { id: true, requesterId: true },
+  });
+
+  if (!ticket) {
+    res.status(404).json({
+      error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
+    });
+    return null;
+  }
+
+  if (ticket.requesterId !== requesterId) {
+    res.status(403).json({
+      error: { message: forbiddenMessage, code: "FORBIDDEN" },
+    });
+    return null;
+  }
+
+  return { ticketId: ticket.id, requesterId };
+}
+
+// Central error handler: maps multer / file-type upload errors to the
+// documented API responses (413 FILE_TOO_LARGE, 415 INVALID_FILE_TYPE).
+app.use(
+  (err: unknown, _req: Request, res: Response, next: NextFunction) => {
+    if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+      res.status(413).json({
+        error: { message: "File size must not exceed 5 MB", code: "FILE_TOO_LARGE" },
+      });
+      return;
+    }
+    if (err instanceof multer.MulterError) {
+      res.status(400).json({
+        error: {
+          message: "Invalid file upload",
+          code: "INVALID_UPLOAD",
+          details: { file: err.code },
+        },
+      });
+      return;
+    }
+    if ((err as { code?: string } | null)?.code === "INVALID_FILE_TYPE") {
+      res.status(415).json({
+        error: {
+          message: "Only JPG, PNG, WEBP, and PDF files are allowed",
+          code: "INVALID_FILE_TYPE",
+        },
+      });
+      return;
+    }
+    next(err);
+  }
+);
 
 export default app;
