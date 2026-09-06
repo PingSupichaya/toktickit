@@ -4,8 +4,12 @@ IT Service Desk app with a React client and an Express + PostgreSQL (Prisma) ser
 
 ## Project structure
 
-- `client/` — React + Vite frontend
-- `server/` — Express API + Prisma/PostgreSQL
+- `client/` — React + Vite frontend (unit/component tests in `client/tests/`)
+- `server/` — Express API + Prisma/PostgreSQL (API tests in `server/tests/`)
+- `e2e/` — Playwright end-to-end tests, organized by lab (`e2e/lab-02/`)
+- `docs/` — lab documentation (specifications, API/UI specs, evidence reviews)
+- `artifacts/` — test evidence, e.g. E2E screenshots
+- `playwright.config.ts` — root Playwright config (starts client + API, points at `e2e/`)
 
 ## Prerequisites
 
@@ -13,6 +17,14 @@ IT Service Desk app with a React client and an Express + PostgreSQL (Prisma) ser
 - PostgreSQL (only needed for server database features)
 
 ## Project Setup
+
+### Repo root
+
+Install the root dev dependencies (Playwright, used by the E2E suite):
+
+```bash
+npm install
+```
 
 ### Client
 
@@ -27,6 +39,13 @@ npm install
 cd server
 npm install
 ```
+
+### Environment files
+
+Both apps read their config from a git-ignored `.env` file. Copy the provided examples once:
+
+- `server/.env.example` → `server/.env` — sets `DATABASE_URL` (already matches the Docker command below) and `PORT=3000`.
+- `client/.env.example` → `client/.env` — sets `VITE_API_URL=http://localhost:3000`, the base URL of the TokTickIT API.
 
 ### PostgreSQL via Docker
 
@@ -93,6 +112,8 @@ Useful options:
 npx playwright test --headed      # Watch the browser while it runs
 npx playwright test --reporter=html   # Open an HTML report after running
 ```
+
+The same commands are also available as npm scripts from the repo root: `npm run test:e2e`, `npm run test:e2e:headed`, and `npm run test:e2e:report`.
 
 **What it verifies** — `e2e/lab-02/requester-ticket-flow.spec.ts` (5 tests, serial):
 1. Select a requester → create a ticket (validation, submitting, success states) at desktop/tablet/mobile.
