@@ -11,8 +11,18 @@ datasource db {
 }
 
 // ---------------------------------------------------------------------------
-// Lab 2 — Requester Ticketing System
+// Lab 3 — Real users, authentication, IT Staff queue, User Management
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  REQUESTER
+  IT_STAFF
+  ADMIN
+}
 
 enum RequestedPriority {
   LOW
@@ -22,10 +32,17 @@ enum RequestedPriority {
 
 enum TicketStatus {
   NEW
+  OPEN
+  IN_PROGRESS
+  WAITING_FOR_REQUESTER
+  RESOLVED
+  CLOSED
+  REOPENED
+  CANCELLED
 }
 
 // ---------------------------------------------------------------------------
-// Reference data
+// Reference data (unchanged from Lab 2)
 // ---------------------------------------------------------------------------
 
 model Category {
@@ -34,7 +51,7 @@ model Category {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  tickets   Ticket[]
+  tickets Ticket[]
 
   @@map("category")
 }
@@ -44,63 +61,100 @@ model RelatedSystem {
   name     String  @unique
   isActive Boolean @default(true)
 
-  tickets  Ticket[]
+  tickets Ticket[]
 
   @@map("related_system")
 }
 
 // ---------------------------------------------------------------------------
-// Requester (development selector — not real auth)
+// User (replaces the Lab 2 Requester model; table `user`)
 // ---------------------------------------------------------------------------
 
-model Requester {
-  id        Int      @id @default(autoincrement())
-  name      String
-  email     String   @unique
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model User {
+  id                  Int       @id @default(autoincrement())
+  name                String
+  email               String    @unique
+  role                UserRole
+  isActive            Boolean   @default(true)
+  passwordHash        String
+  mustChangePassword  Boolean   @default(true)
+  failedLoginAttempts Int       @default(0)
+  lastFailedLoginAt   DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  tickets   Ticket[]
+  submittedTickets Ticket[]         @relation("submittedTickets")
+  ownedTickets     Ticket[]         @relation("ownedTickets")
+  sessions         Session[]
+  publicComments   PublicComment[]
+  internalNotes    InternalNote[]
 
   @@index([isActive])
-  @@map("requester")
+  @@index([role])
+  @@map("user")
 }
 
 // ---------------------------------------------------------------------------
-// Ticket
+// Session (8-hour opaque cookie token, SHA-256 hashed)
+// ---------------------------------------------------------------------------
+
+model Session {
+  id        Int      @id @default(autoincrement())
+  tokenHash String   @unique
+  userId    Int
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("session")
+}
+
+// ---------------------------------------------------------------------------
+// Ticket (Lab 2 ticket; owner, IT Priority, expanded status)
 // ---------------------------------------------------------------------------
 
 model Ticket {
   id                Int               @id @default(autoincrement())
   ticketNumber      String            @unique
-  requesterId       Int
+  submittedById     Int
+  ownerId           Int?
   categoryId        Int
   relatedSystemId   Int
   summary           String
   description       String
   requestedPriority RequestedPriority
+  itPriority        RequestedPriority
   currentStatus     TicketStatus      @default(NEW)
   ticketDate        DateTime          @default(now())
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
-  requester         Requester         @relation(fields: [requesterId], references: [id])
-  category          Category          @relation(fields: [categoryId], references: [id])
-  relatedSystem     RelatedSystem     @relation(fields: [relatedSystemId], references: [id])
-  attachments       Attachment[]
+  submitter       User             @relation("submittedTickets", fields: [submittedById], references: [id])
+  owner           User?            @relation("ownedTickets", fields: [ownerId], references: [id])
+  category        Category         @relation(fields: [categoryId], references: [id])
+  relatedSystem   RelatedSystem    @relation(fields: [relatedSystemId], references: [id])
+  attachments     Attachment[]
+  publicComments  PublicComment[]
+  internalNotes   InternalNote[]
 
-  @@index([requesterId])
+  @@index([submittedById])
+  @@index([ownerId])
+  @@index([itPriority])
   @@index([ticketDate])
-  @@index([requesterId, ticketDate])
   @@index([currentStatus])
   @@index([categoryId])
   @@index([relatedSystemId])
+  @@index([submittedById, ticketDate])
+  @@index([itPriority, ticketDate])
+  @@index([currentStatus, ticketDate])
   @@map("ticket")
 }
 
 // ---------------------------------------------------------------------------
-// Attachment (soft-removal)
+// Attachment (unchanged from Lab 2; soft-removal)
 // ---------------------------------------------------------------------------
 
 model Attachment {
@@ -122,4 +176,42 @@ model Attachment {
   @@index([ticketId])
   @@index([ticketId, isRemoved])
   @@map("attachment")
+}
+
+// ---------------------------------------------------------------------------
+// Public Comment (visible to the Requester; 1-2000 chars)
+// ---------------------------------------------------------------------------
+
+model PublicComment {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int
+  authorId  Int
+  content   String
+  createdAt DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id])
+  author User   @relation(fields: [authorId], references: [id])
+
+  @@index([ticketId])
+  @@index([ticketId, createdAt])
+  @@map("public_comment")
+}
+
+// ---------------------------------------------------------------------------
+// Internal Note (staff-only; 1-2000 chars)
+// ---------------------------------------------------------------------------
+
+model InternalNote {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int
+  authorId  Int
+  content   String
+  createdAt DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id])
+  author User   @relation(fields: [authorId], references: [id])
+
+  @@index([ticketId])
+  @@index([ticketId, createdAt])
+  @@map("internal_note")
 }
