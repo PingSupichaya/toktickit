@@ -138,9 +138,22 @@ describe("RequesterTicketDetail (T-016) - AC-03", () => {
     expect(
       within(detail).getByRole("button", { name: "Back to My Tickets" })
     ).toBeInTheDocument();
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
     expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
+  });
+
+  it("renders the Public Comments card with the comment composer", async () => {
+    await openDetail();
+
+    const comments = screen.getByTestId("public-comments");
+    expect(within(comments).getByText("Public Comments (0)")).toBeInTheDocument();
+    expect(within(comments).getByTestId("comment-textarea")).toBeInTheDocument();
+    expect(
+      within(comments).getByTestId("counter-comment")
+    ).toBeInTheDocument();
+    expect(
+      within(comments).getByRole("button", { name: "Post Comment" })
+    ).toBeInTheDocument();
   });
 
   it("shows the breadcrumb 'My Tickets / TKT-000001' and calls onBack via it", async () => {

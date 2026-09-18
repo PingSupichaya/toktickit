@@ -36,7 +36,23 @@ import {
 } from "./session.js";
 
 const PRIORITIES: RequestedPriority[] = ["LOW", "MEDIUM", "HIGH"];
-const STATUSES: TicketStatus[] = ["NEW"];
+const STATUSES: TicketStatus[] = [
+  "NEW",
+  "OPEN",
+  "IN_PROGRESS",
+  "WAITING_FOR_REQUESTER",
+  "RESOLVED",
+  "CLOSED",
+  "REOPENED",
+  "CANCELLED",
+];
+const INDICATABLE_STATUSES: TicketStatus[] = [
+  "NEW",
+  "OPEN",
+  "IN_PROGRESS",
+  "WAITING_FOR_REQUESTER",
+  "REOPENED",
+];
 const PAGE_SIZES = [10, 25, 50];
 
 // Attachment upload helper (AC-06/FR-24/BR-13). Files are buffered in memory
@@ -551,7 +567,8 @@ app.get(
       if (STATUSES.includes(q.status as TicketStatus)) {
         status = q.status as TicketStatus;
       } else {
-        details.status = 'Status must be "NEW"';
+        details.status =
+          'Status must be "NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "RESOLVED", "CLOSED", "REOPENED", or "CANCELLED"';
       }
     }
 
@@ -692,6 +709,7 @@ app.get("/api/tickets/:ticketId", async (req: Request, res: Response) => {
       where: { id: ticketId },
       include: {
         submitter: { select: { id: true, name: true, email: true } },
+        owner: { select: { id: true, name: true, role: true } },
         category: { select: { id: true, name: true } },
         relatedSystem: { select: { id: true, name: true } },
         attachments: {
@@ -706,6 +724,14 @@ app.get("/api/tickets/:ticketId", async (req: Request, res: Response) => {
             removedAt: true,
             removalReason: true,
           },
+        },
+        publicComments: {
+          orderBy: { createdAt: "asc" },
+          include: { author: { select: { id: true, name: true } } },
+        },
+        internalNotes: {
+          orderBy: { createdAt: "asc" },
+          include: { author: { select: { id: true, name: true } } },
         },
       },
     });
@@ -722,7 +748,24 @@ app.get("/api/tickets/:ticketId", async (req: Request, res: Response) => {
       });
     }
 
-    res.status(200).json({ data: ticket });
+    const isStaff =
+      user.role === UserRole.IT_STAFF || user.role === UserRole.ADMIN;
+
+    const data: Record<string, unknown> = {
+      ...ticket,
+      canIndicateResolved:
+        user.role === UserRole.REQUESTER &&
+        ticket.submittedById === user.id &&
+        INDICATABLE_STATUSES.includes(ticket.currentStatus),
+      comments: ticket.publicComments.map(toCommentShape),
+    };
+    delete data.publicComments;
+    if (isStaff) {
+      data.notes = ticket.internalNotes.map(toCommentShape);
+    }
+    delete data.internalNotes;
+
+    res.status(200).json({ data });
   } catch (err) {
     console.error("Failed to fetch ticket:", err);
     res.status(500).json({
@@ -733,6 +776,225 @@ app.get("/api/tickets/:ticketId", async (req: Request, res: Response) => {
     });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Public Comments (FR-12 / FR-13 / BR-04, BR-23)
+// POST /api/tickets/:ticketId/comments -> 201 { data: comment }
+//   body: { content: 1-2000 chars after trim, whitespace-only rejected }
+//   access: the submitting Requester or IT_STAFF/ADMIN; a Requester on
+//   someone else's Ticket is indistinguishable from a missing resource (404).
+// GET  /api/tickets/:ticketId/comments -> 200 { data: [comment, ...] } oldest
+//   first. Same access rule as POST.
+// ---------------------------------------------------------------------------
+app.get("/api/tickets/:ticketId/comments", async (req: Request, res: Response) => {
+  try {
+    const user = req.sessionUser;
+    if (!user) {
+      return res.status(401).json({
+        error: { message: "Authentication required", code: "UNAUTHORIZED" },
+      });
+    }
+
+    const access = await resolveTicketAccess(req, res, user, { allowStaff: true });
+    if (!access) return;
+
+    const comments = await getPrisma().publicComment.findMany({
+      where: { ticketId: access.ticketId },
+      orderBy: { createdAt: "asc" },
+      include: { author: { select: { id: true, name: true } } },
+    });
+
+    res.status(200).json({ data: comments.map(toCommentShape) });
+  } catch (err) {
+    console.error("Failed to fetch comments:", err);
+    res.status(500).json({
+      error: {
+        message: "Failed to fetch comments",
+        code: "INTERNAL_SERVER_ERROR",
+      },
+    });
+  }
+});
+
+app.post("/api/tickets/:ticketId/comments", async (req: Request, res: Response) => {
+  try {
+    const user = req.sessionUser;
+    if (!user) {
+      return res.status(401).json({
+        error: { message: "Authentication required", code: "UNAUTHORIZED" },
+      });
+    }
+
+    const access = await resolveTicketAccess(req, res, user, { allowStaff: true });
+    if (!access) return;
+
+    const body = req.body ?? {};
+    const content = typeof body.content === "string" ? body.content.trim() : "";
+    if (content.length < 1 || content.length > 2000) {
+      return res.status(400).json({
+        error: {
+          message: "Validation failed",
+          code: "VALIDATION_ERROR",
+          details: { content: "Content must be between 1 and 2000 characters" },
+        },
+      });
+    }
+
+    const comment = await getPrisma().publicComment.create({
+      data: { ticketId: access.ticketId, authorId: user.id, content },
+      include: { author: { select: { id: true, name: true } } },
+    });
+
+    res.status(201).json({ data: toCommentShape(comment) });
+  } catch (err) {
+    console.error("Failed to create comment:", err);
+    res.status(500).json({
+      error: {
+        message: "Failed to create comment",
+        code: "INTERNAL_SERVER_ERROR",
+      },
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Requester "Problem Appears Resolved" (FR-12 / BR-21)
+// POST /api/tickets/:ticketId/indicate-resolved -> 201 { data: comment }
+// Records an automatic Public Comment (fixed system text); never changes the
+// Ticket status. Only the submitting Requester may use it, and only while the
+// Ticket is in a non-terminal state (409 TICKET_NOT_INDICATABLE otherwise).
+// ---------------------------------------------------------------------------
+app.post(
+  "/api/tickets/:ticketId/indicate-resolved",
+  requireRole(UserRole.REQUESTER),
+  async (req: Request, res: Response) => {
+    try {
+      const user = req.sessionUser;
+      if (!user) {
+        return res.status(401).json({
+          error: { message: "Authentication required", code: "UNAUTHORIZED" },
+        });
+      }
+
+      const access = await resolveTicketAccess(req, res, user, { allowStaff: false });
+      if (!access) return;
+
+      if (!INDICATABLE_STATUSES.includes(access.currentStatus)) {
+        return res.status(409).json({
+          error: {
+            message: "This Ticket cannot be marked as appearing resolved in its current status",
+            code: "TICKET_NOT_INDICATABLE",
+          },
+        });
+      }
+
+      const comment = await getPrisma().publicComment.create({
+        data: {
+          ticketId: access.ticketId,
+          authorId: user.id,
+          content: "The Requester indicated the problem appears resolved.",
+        },
+        include: { author: { select: { id: true, name: true } } },
+      });
+
+      res.status(201).json({ data: toCommentShape(comment) });
+    } catch (err) {
+      console.error("Failed to record indicate-resolved:", err);
+      res.status(500).json({
+        error: {
+          message: "Failed to record indicate-resolved",
+          code: "INTERNAL_SERVER_ERROR",
+        },
+      });
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Requester responds to a request for information (FR-13 / BR-22)
+// POST /api/tickets/:ticketId/requester-respond -> 200 { data: { ticket,
+// comment? } }
+// Moves the own Ticket from WAITING_FOR_REQUESTER to OPEN (the only status
+// write a Requester may perform). Optional content becomes a Public Comment.
+// ---------------------------------------------------------------------------
+app.post(
+  "/api/tickets/:ticketId/requester-respond",
+  requireRole(UserRole.REQUESTER),
+  async (req: Request, res: Response) => {
+    try {
+      const user = req.sessionUser;
+      if (!user) {
+        return res.status(401).json({
+          error: { message: "Authentication required", code: "UNAUTHORIZED" },
+        });
+      }
+
+      const access = await resolveTicketAccess(req, res, user, { allowStaff: false });
+      if (!access) return;
+
+      if (access.currentStatus !== "WAITING_FOR_REQUESTER") {
+        return res.status(409).json({
+          error: {
+            message: "This Ticket is not waiting for the Requester",
+            code: "TICKET_STATUS_TRANSITION_NOT_ALLOWED",
+          },
+        });
+      }
+
+      const body = req.body ?? {};
+      const content =
+        body.content !== undefined
+          ? typeof body.content === "string"
+            ? body.content.trim()
+            : ""
+          : undefined;
+      if (content !== undefined && (content.length < 1 || content.length > 2000)) {
+        return res.status(400).json({
+          error: {
+            message: "Validation failed",
+            code: "VALIDATION_ERROR",
+            details: { content: "Content must be between 1 and 2000 characters" },
+          },
+        });
+      }
+
+      const { updated, comment } = await getPrisma().$transaction(async (tx) => {
+        const u = await tx.ticket.update({
+          where: { id: access.ticketId },
+          data: { currentStatus: "OPEN" },
+        });
+        const c =
+          content !== undefined
+            ? await tx.publicComment.create({
+                data: { ticketId: access.ticketId, authorId: user.id, content },
+                include: { author: { select: { id: true, name: true } } },
+              })
+            : null;
+        return { updated: u, comment: c };
+      });
+
+      const data: Record<string, unknown> = {
+        ticket: {
+          ticketId: updated.id,
+          ticketNumber: updated.ticketNumber,
+          currentStatus: updated.currentStatus,
+          updatedAt: updated.updatedAt,
+        },
+      };
+      if (comment) data.comment = toCommentShape(comment);
+
+      res.status(200).json({ data });
+    } catch (err) {
+      console.error("Failed to record requester respond:", err);
+      res.status(500).json({
+        error: {
+          message: "Failed to record requester respond",
+          code: "INTERNAL_SERVER_ERROR",
+        },
+      });
+    }
+  }
+);
 
 // ---------------------------------------------------------------------------
 // Upload Attachment (AC-06 / BR-12,13,14)
@@ -1081,6 +1343,81 @@ async function resolveTicketForRoute(
   }
 
   return { ticketId: ticket.id };
+}
+
+// Resolves ticket access for comment/requester-action routes using the
+// session user. When `allowStaff` is true, IT_STAFF/ADMIN may reach any
+// Ticket (comments); otherwise only the submitting Requester may access
+// (Requester-only actions). Cross-owner or missing Tickets are
+// indistinguishable: 404 TICKET_NOT_FOUND (D-03).
+async function resolveTicketAccess(
+  req: Request,
+  res: Response,
+  user: { id: number; role: UserRole },
+  options: { allowStaff: boolean }
+): Promise<{
+  ticketId: number;
+  currentStatus: TicketStatus;
+  ticketNumber: string;
+} | null> {
+  const ticketId = Number(req.params.ticketId);
+  if (!Number.isInteger(ticketId) || ticketId <= 0) {
+    res.status(404).json({
+      error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
+    });
+    return null;
+  }
+
+  const isStaff =
+    user.role === UserRole.IT_STAFF || user.role === UserRole.ADMIN;
+  const ticket = await getPrisma().ticket.findUnique({
+    where: { id: ticketId },
+    select: {
+      id: true,
+      ticketNumber: true,
+      submittedById: true,
+      currentStatus: true,
+    },
+  });
+
+  if (!ticket) {
+    res.status(404).json({
+      error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
+    });
+    return null;
+  }
+
+  const allowByStaff = options.allowStaff && isStaff;
+  if (!allowByStaff && ticket.submittedById !== user.id) {
+    res.status(404).json({
+      error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
+    });
+    return null;
+  }
+
+  return {
+    ticketId: ticket.id,
+    currentStatus: ticket.currentStatus,
+    ticketNumber: ticket.ticketNumber,
+  };
+}
+
+// Serializes a PublicComment / InternalNote row for API responses (never
+// exposes author emails or internal identifiers).
+function toCommentShape(comment: {
+  id: number;
+  ticketId: number;
+  content: string;
+  createdAt: Date;
+  author: { id: number; name: string };
+}) {
+  return {
+    id: comment.id,
+    ticketId: comment.ticketId,
+    author: { id: comment.author.id, name: comment.author.name },
+    content: comment.content,
+    createdAt: comment.createdAt,
+  };
 }
 
 // Central error handler: maps multer / file-type upload errors to the

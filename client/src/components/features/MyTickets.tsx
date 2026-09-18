@@ -17,7 +17,16 @@ import { TicketCard } from "./TicketCard.js";
 import { TicketCardSkeleton } from "./TicketCardSkeleton.js";
 import { Pagination } from "./Pagination.js";
 
-const STATUS_CHOICES = ["NEW"] as const;
+const STATUS_CHOICES = [
+  "NEW",
+  "OPEN",
+  "IN_PROGRESS",
+  "WAITING_FOR_REQUESTER",
+  "RESOLVED",
+  "CLOSED",
+  "REOPENED",
+  "CANCELLED",
+] as const;
 
 const SORT_CHOICES = [
   { value: "date-desc", label: "Newest first" },

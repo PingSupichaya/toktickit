@@ -1713,6 +1713,50 @@ button {
   margin: 0;
 }
 
+/* Public Comments thread (Lab 3 ui-spec 6.1) */
+.comment-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.comment-item {
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.comment-item__meta {
+  display: block;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.comment-item__author {
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-right: var(--space-1);
+}
+
+.comment-item__content {
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+  margin: var(--space-1) 0 0;
+}
+
+.comments-empty {
+  color: var(--color-text-secondary);
+  margin: var(--space-2) 0;
+}
+
+.comments-composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
 /* ---------------------------------------------------------------------------
    Attachments section (Ticket Detail) (ui-spec 9)
    --------------------------------------------------------------------------- */
@@ -1936,6 +1980,16 @@ button {
     width: 100%;
     min-height: 44px;
   }
+}
+
+.ticket-detail__actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: flex-start;
+  margin-top: var(--space-8);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
 }
 
 .ticket-detail__actions {
