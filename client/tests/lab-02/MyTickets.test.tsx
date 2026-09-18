@@ -7,10 +7,13 @@ import App from "../../src/App.js";
 
 vi.mock("../../src/api.js");
 
-const activeRequesters = [
-  { id: 1, name: "Alice Johnson", email: "alice@example.com" },
-  { id: 2, name: "Bob Smith", email: "bob@example.com" },
-];
+const alice: api.AuthUser = {
+  id: 1,
+  name: "Alice Johnson",
+  email: "alice@example.com",
+  role: "REQUESTER",
+  isActive: true,
+};
 
 const categories = [
   { id: 1, name: "Account and Access" },
@@ -78,8 +81,8 @@ function lastFetchTicketsCall(): TicketQuery | undefined {
 }
 
 beforeEach(() => {
-  localStorage.clear();
-  vi.mocked(api.fetchRequesters).mockResolvedValue(activeRequesters);
+  vi.clearAllMocks();
+  vi.mocked(api.fetchMe).mockResolvedValue({ user: alice, mustChangePassword: false });
   vi.mocked(api.fetchCategories).mockResolvedValue(categories);
   vi.mocked(api.fetchRelatedSystems).mockResolvedValue(relatedSystems);
   vi.mocked(api.fetchTickets).mockResolvedValue(defaultPage);
@@ -88,10 +91,6 @@ beforeEach(() => {
 const user = userEvent.setup();
 
 async function openMyTickets() {
-  localStorage.setItem(
-    "toktickit.requester",
-    JSON.stringify({ id: 1, name: "Alice Johnson", email: "alice@example.com" })
-  );
   render(<App />);
   await waitFor(() => {
     expect(document.querySelector(".app-header__user-name")?.textContent).toBe(
@@ -152,7 +151,8 @@ describe("MyTickets (T-014)", () => {
     expect(within(list).getByText("📎 2")).toBeInTheDocument();
     expect(within(list).getByText("Campus Wi-Fi")).toBeInTheDocument();
 
-    expect(lastFetchTicketsCall()?.requesterId).toBe(1);
+    // The list query is session-scoped; the client no longer sends requesterId.
+    expect(lastFetchTicketsCall()).not.toHaveProperty("requesterId");
     expect(
       screen.getByRole("button", { name: "Open ticket TKT-000001" })
     ).toBeInTheDocument();

@@ -53,33 +53,37 @@ export function Input({
       <label className={`field__label${required ? " field__label--required" : ""}`} htmlFor={fieldId}>
         {label}
       </label>
-      <input
-        id={fieldId}
-        className={`input ${className}`}
-        readOnly={readonly}
-        aria-required={required || undefined}
-        aria-invalid={error ? true : undefined}
-        value={value}
-        maxLength={maxLength}
-        {...rest}
-      />
-      {maxLength !== undefined && (
-        <div className="field__status">
-          <span
-            className={`field__status-counter${counterClass}`}
-            data-testid={counterTestId}
-          >
-            {currentLength} / {maxLength} characters
-          </span>
+      <div className="field__control">
+        <div className="field__input-wrap">
+          <input
+            id={fieldId}
+            className={`input ${className}`}
+            readOnly={readonly}
+            aria-required={required || undefined}
+            aria-invalid={error ? true : undefined}
+            value={value}
+            maxLength={maxLength}
+            {...rest}
+          />
+          {children}
         </div>
-      )}
-      {hint && <span className="field__hint">{hint}</span>}
-      {error && (
-        <span className="field__error" role="alert" data-testid={errorTestId}>
-          {error}
-        </span>
-      )}
-      {children}
+        {maxLength !== undefined && (
+          <div className="field__status">
+            <span
+              className={`field__status-counter${counterClass}`}
+              data-testid={counterTestId}
+            >
+              {currentLength} / {maxLength} characters
+            </span>
+          </div>
+        )}
+        {hint && <span className="field__hint">{hint}</span>}
+        {error && (
+          <span className="field__error" role="alert" data-testid={errorTestId}>
+            {error}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

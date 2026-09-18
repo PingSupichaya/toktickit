@@ -3,7 +3,9 @@ import cors from "cors";
 import fs from "node:fs";
 import path from "node:path";
 import multer from "multer";
-import { Prisma, RequestedPriority, TicketStatus } from "@prisma/client";
+import bcrypt from "bcryptjs";
+import { Prisma, RequestedPriority, TicketStatus, UserRole } from "@prisma/client";
+import type { User } from "@prisma/client";
 import { getPrisma } from "./prisma.js";
 import {
   ALLOWED_MIME_TYPES,
@@ -14,6 +16,24 @@ import {
   storeFileBuffer,
   deleteStoredFile,
 } from "./attachmentFiles.js";
+import {
+  LoginRateLimiter,
+  csrfProtect,
+  mustChangePasswordGuard,
+  readCookie,
+  requireRole,
+  requireSession,
+} from "./middleware/authMiddleware.js";
+import { BCRYPT_COST, passwordRuleViolations } from "./passwordRules.js";
+import { getTrustedOrigins } from "./csrf.js";
+import { normalizeEmail } from "./email.js";
+import {
+  SESSION_COOKIE_NAME,
+  SESSION_MAX_AGE_SECONDS,
+  generateSessionToken,
+  hashSessionToken,
+  sessionExpiry,
+} from "./session.js";
 
 const PRIORITIES: RequestedPriority[] = ["LOW", "MEDIUM", "HIGH"];
 const STATUSES: TicketStatus[] = ["NEW"];
@@ -41,11 +61,249 @@ const upload = multer({
 // Supertest can import `app` without opening a port. Do not merge these files.
 export const app = express();
 
-app.use(cors());          // already wired: lets the Vite dev server call this API
+// CORS allows only the trusted browser origins (the Vite dev server) to call
+// the API with credentials so the session cookie is sent and accepted.
+app.use(
+  cors({
+    origin: getTrustedOrigins(),
+    credentials: true,
+  })
+);
 app.use(express.json());
+
+// Login failures are tracked per email in a rolling 15-minute window (BR-08).
+const loginRateLimiter = new LoginRateLimiter();
 
 app.get("/api/health", (_req: Request, res: Response) => {
   res.status(200).json({ status: "ok", service: "TokTickIT API" });
+});
+
+// ---------------------------------------------------------------------------
+// Authentication (Lab 3). POST /api/auth/login is public and is registered
+// before the global session middleware below. Everything else under /api
+// requires a valid session, is CSRF-protected on state-changing methods, and
+// is gated by mustChangePassword (only the /api/auth/* routes pass).
+// ---------------------------------------------------------------------------
+
+type PublicUserFields = Pick<
+  User,
+  "id" | "name" | "email" | "role" | "isActive"
+>;
+
+// Shape of a user in auth responses (§3). Never includes passwordHash,
+// failedLoginAttempts, or lastFailedLoginAt (API-10, BR-09).
+function toPublicUser(user: PublicUserFields) {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    isActive: user.isActive,
+  };
+}
+
+function setSessionCookie(res: Response, token: string): void {
+  res.cookie(SESSION_COOKIE_NAME, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_MAX_AGE_SECONDS * 1000,
+    secure: process.env.COOKIE_SECURE === "true",
+  });
+}
+
+// POST /api/auth/login (AC-01 / AC-06 / AC-07 / BR-01,06,07,08)
+app.post(
+  "/api/auth/login",
+  loginRateLimiter.middleware(),
+  async (req: Request, res: Response) => {
+    try {
+      const body = req.body ?? {};
+      const emailRaw = typeof body.email === "string" ? body.email : "";
+      const password = typeof body.password === "string" ? body.password : "";
+
+      const details: Record<string, string> = {};
+      if (emailRaw.trim() === "") details.email = "Email is required";
+      if (password === "") details.password = "Password is required";
+      if (Object.keys(details).length > 0) {
+        return res.status(400).json({
+          error: {
+            message: "Validation failed",
+            code: "VALIDATION_ERROR",
+            details,
+          },
+        });
+      }
+
+      const email = normalizeEmail(emailRaw);
+      const user = await getPrisma().user.findUnique({ where: { email } });
+
+      // Unknown email and wrong password produce identical responses so the
+      // endpoint never leaks which accounts exist (BR-06, D-03).
+      const passwordMatches = user
+        ? await bcrypt.compare(password, user.passwordHash)
+        : false;
+
+      if (!user || !passwordMatches) {
+        loginRateLimiter.recordFailure(email);
+        return res.status(401).json({
+          error: {
+            message: "Invalid email or password",
+            code: "INVALID_CREDENTIALS",
+          },
+        });
+      }
+
+      if (!user.isActive) {
+        return res.status(403).json({
+          error: {
+            message: "Your account is not active. Contact your administrator.",
+            code: "ACCOUNT_INACTIVE",
+          },
+        });
+      }
+
+      // A successful login resets the failure counter (BR-08).
+      loginRateLimiter.reset(email);
+
+      const token = generateSessionToken();
+      await getPrisma().session.create({
+        data: {
+          tokenHash: hashSessionToken(token),
+          userId: user.id,
+          expiresAt: sessionExpiry(),
+        },
+      });
+
+      setSessionCookie(res, token);
+
+      return res.status(200).json({
+        data: {
+          user: toPublicUser(user),
+          mustChangePassword: user.mustChangePassword,
+        },
+      });
+    } catch (err) {
+      console.error("Failed to log in:", err);
+      return res.status(500).json({
+        error: {
+          message: "Internal server error",
+          code: "INTERNAL_SERVER_ERROR",
+        },
+      });
+    }
+  }
+);
+
+// Global session + CSRF + must-change-password gate on every /api route.
+app.use("/api", requireSession);
+app.use("/api", csrfProtect);
+app.use("/api", mustChangePasswordGuard);
+
+// GET /api/auth/me (AC-05) — restores session state on page reload.
+app.get("/api/auth/me", (req: Request, res: Response) => {
+  const user = req.sessionUser!;
+  return res.status(200).json({
+    data: {
+      user: toPublicUser(user),
+      mustChangePassword: user.mustChangePassword,
+    },
+  });
+});
+
+// POST /api/auth/logout (AC-05 / BR-11) — invalidates the session (204).
+app.post("/api/auth/logout", async (req: Request, res: Response) => {
+  try {
+    const token = readCookie(req, SESSION_COOKIE_NAME);
+    if (token) {
+      await getPrisma().session.deleteMany({
+        where: { tokenHash: hashSessionToken(token) },
+      });
+    }
+    res.clearCookie(SESSION_COOKIE_NAME, { path: "/" });
+    return res.status(204).end();
+  } catch (err) {
+    console.error("Failed to log out:", err);
+    return res.status(500).json({
+      error: {
+        message: "Internal server error",
+        code: "INTERNAL_SERVER_ERROR",
+      },
+    });
+  }
+});
+
+// POST /api/auth/change-password (AC-02 / BR-02, BR-10). Clears the
+// mustChangePassword flag so the first-login flow can open the app (AC-02).
+app.post("/api/auth/change-password", async (req: Request, res: Response) => {
+  try {
+    const user = req.sessionUser!;
+    const body = req.body ?? {};
+    const currentPassword =
+      typeof body.currentPassword === "string" ? body.currentPassword : "";
+    const newPassword =
+      typeof body.newPassword === "string" ? body.newPassword : "";
+
+    if (currentPassword === "") {
+      return res.status(400).json({
+        error: {
+          message: "Validation failed",
+          code: "VALIDATION_ERROR",
+          details: { currentPassword: "Current password is required" },
+        },
+      });
+    }
+
+    const fullUser = await getPrisma().user.findUnique({
+      where: { id: user.id },
+    });
+    const currentMatches = fullUser
+      ? await bcrypt.compare(currentPassword, fullUser.passwordHash)
+      : false;
+
+    if (!currentMatches) {
+      return res.status(401).json({
+        error: {
+          message: "Current password is incorrect",
+          code: "INVALID_CURRENT_PASSWORD",
+        },
+      });
+    }
+
+    const violations = passwordRuleViolations(newPassword, currentPassword);
+    if (violations.length > 0) {
+      return res.status(400).json({
+        error: {
+          message: "Validation failed",
+          code: "VALIDATION_ERROR",
+          details: { newPassword: violations.join("; ") },
+        },
+      });
+    }
+
+    const updated = await getPrisma().user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: await bcrypt.hash(newPassword, BCRYPT_COST),
+        mustChangePassword: false,
+      },
+    });
+
+    return res.status(200).json({
+      data: {
+        user: toPublicUser(updated),
+        mustChangePassword: updated.mustChangePassword,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to change password:", err);
+    return res.status(500).json({
+      error: {
+        message: "Internal server error",
+        code: "INTERNAL_SERVER_ERROR",
+      },
+    });
+  }
 });
 
 app.get("/api/categories", async (_req: Request, res: Response) => {
@@ -92,28 +350,39 @@ app.get("/api/related-systems", async (_req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
-// Development Requester selector
-// GET /api/requesters -> { data: [{ id, name, email }, ...] } ordered by id
-// ascending. Only active requesters are returned (BR-05, FR-02).
+// IT Staff Ticket Queue (Lab 3, deferred to the IT Staff issue). The role
+// guard is wired now so the role matrix is enforced (Requester → 403, BR-36);
+// authorized staff/admins currently receive 404 until the queue is shipped.
 // ---------------------------------------------------------------------------
-app.get("/api/requesters", async (_req: Request, res: Response) => {
-  try {
-    const requesters = await getPrisma().requester.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true, email: true },
-      orderBy: { id: "asc" },
-    });
-    res.status(200).json({ data: requesters });
-  } catch (err) {
-    console.error("Failed to fetch requesters:", err);
-    res.status(500).json({
+app.get(
+  "/api/tickets/queue",
+  requireRole(UserRole.IT_STAFF, UserRole.ADMIN),
+  (_req: Request, res: Response) => {
+    res.status(404).json({
       error: {
-        message: "Failed to fetch requesters",
-        code: "INTERNAL_SERVER_ERROR",
+        message: "Ticket queue is not available yet",
+        code: "NOT_FOUND",
       },
     });
   }
-});
+);
+
+// ---------------------------------------------------------------------------
+// User Management (Lab 3, deferred to the Admin issue). Non-Administrators are
+// rejected with 403; the list/create/edit/reset endpoints ship later.
+// ---------------------------------------------------------------------------
+app.get(
+  "/api/users",
+  requireRole(UserRole.ADMIN),
+  (_req: Request, res: Response) => {
+    res.status(404).json({
+      error: {
+        message: "User management is not available yet",
+        code: "NOT_FOUND",
+      },
+    });
+  }
+);
 
 // ---------------------------------------------------------------------------
 // Create Ticket (AC-01 / AC-04 / BR-01,02,06)
@@ -122,7 +391,10 @@ app.get("/api/requesters", async (_req: Request, res: Response) => {
 // resources exist and are active. Ticket number is generated from the
 // recorded id as TKT-XXXXXX. ticketDate/currentStatus are set by the backend.
 // ---------------------------------------------------------------------------
-app.post("/api/tickets", async (req: Request, res: Response) => {
+app.post(
+  "/api/tickets",
+  requireRole(UserRole.REQUESTER),
+  async (req: Request, res: Response) => {
   try {
     const body = req.body ?? {};
     const details: Record<string, string> = {};
@@ -147,13 +419,12 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
       details.requestedPriority = 'Must be "LOW", "MEDIUM", or "HIGH"';
     }
 
-    const requesterId = Number(body.requesterId);
+    if (body.requesterId !== undefined) {
+      details.requesterId = "Requester is derived from the session and must not be provided";
+    }
     const categoryId = Number(body.categoryId);
     const relatedSystemId = Number(body.relatedSystemId);
 
-    if (!Number.isInteger(requesterId) || requesterId <= 0) {
-      details.requesterId = "Must be a valid requester ID";
-    }
     if (!Number.isInteger(categoryId) || categoryId <= 0) {
       details.categoryId = "Must be a valid category ID";
     }
@@ -167,18 +438,12 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
       });
     }
 
-    // Referenced resources must exist and be active.
-    const requester = await getPrisma().requester.findUnique({
-      where: { id: requesterId },
-    });
+    // The authenticated Requester is the submitter; requireRole(REQUESTER)
+    // guarantees the session user is present, active, and a Requester.
+    const requester = req.sessionUser;
     if (!requester) {
-      return res.status(404).json({
-        error: { message: "Requester not found", code: "REQUESTER_NOT_FOUND" },
-      });
-    }
-    if (!requester.isActive) {
-      return res.status(400).json({
-        error: { message: "Requester is not active", code: "REQUESTER_INACTIVE" },
+      return res.status(401).json({
+        error: { message: "Authentication required", code: "UNAUTHORIZED" },
       });
     }
 
@@ -209,12 +474,13 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
       const created = await tx.ticket.create({
         data: {
           ticketNumber: `PENDING-${Date.now()}`,
-          requesterId,
+          submittedById: requester.id,
           categoryId,
           relatedSystemId,
           summary,
           description,
           requestedPriority: priority as RequestedPriority,
+          itPriority: priority as RequestedPriority,
           currentStatus: "NEW",
         },
       });
@@ -224,7 +490,7 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
           ticketNumber: `TKT-${String(created.id).padStart(6, "0")}`,
         },
         include: {
-          requester: { select: { id: true, name: true, email: true } },
+          submitter: { select: { id: true, name: true, email: true } },
           category: { select: { id: true, name: true } },
           relatedSystem: { select: { id: true, name: true } },
         },
@@ -245,21 +511,20 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
 
 // ---------------------------------------------------------------------------
 // My Tickets (AC-05 / AC-08)
-// GET /api/tickets?requesterId=:id -> { data, pagination }
+// GET /api/tickets -> { data, pagination }
 // Supports case-insensitive search and combined filters. Invalid page /
 // pageSize default to safe values (page 1, pageSize 10).
 // ---------------------------------------------------------------------------
-app.get("/api/tickets", async (req: Request, res: Response) => {
+app.get(
+  "/api/tickets",
+  requireRole(UserRole.REQUESTER),
+  async (req: Request, res: Response) => {
   try {
     const q = req.query;
-    const requesterId = Number(q.requesterId);
-    if (q.requesterId === undefined || !Number.isInteger(requesterId) || requesterId <= 0) {
-      return res.status(400).json({
-        error: {
-          message: "Invalid query parameters",
-          code: "INVALID_PARAMETERS",
-          details: { requesterId: "Requester ID is required" },
-        },
+    const requesterId = req.sessionUser?.id;
+    if (requesterId === undefined) {
+      return res.status(401).json({
+        error: { message: "Authentication required", code: "UNAUTHORIZED" },
       });
     }
 
@@ -309,7 +574,7 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
       });
     }
 
-    const where: Prisma.TicketWhereInput = { requesterId };
+    const where: Prisma.TicketWhereInput = { submittedById: requesterId };
     if (categoryId !== undefined) where.categoryId = categoryId;
     if (relatedSystemId !== undefined) where.relatedSystemId = relatedSystemId;
     if (status !== undefined) where.currentStatus = status;
@@ -350,10 +615,12 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
           summary: true,
           description: true,
           requestedPriority: true,
+          itPriority: true,
           currentStatus: true,
           ticketDate: true,
           category: { select: { id: true, name: true } },
           relatedSystem: { select: { id: true, name: true } },
+          owner: { select: { id: true, name: true } },
           _count: {
             select: { attachments: { where: { isRemoved: false } } },
           },
@@ -367,10 +634,12 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
       summary: r.summary,
       description: r.description,
       requestedPriority: r.requestedPriority,
+      itPriority: r.itPriority,
       currentStatus: r.currentStatus,
       ticketDate: r.ticketDate,
       category: r.category,
       relatedSystem: r.relatedSystem,
+      owner: r.owner,
       attachmentCount: r._count.attachments,
     }));
 
@@ -399,18 +668,16 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
 
 // ---------------------------------------------------------------------------
 // Ticket Detail (AC-03 / BR-04)
-// GET /api/tickets/:ticketId?requesterId=:id -> 200 { data: ticket }
-// Enforces ownership: a requester may only view their own tickets.
+// GET /api/tickets/:ticketId -> 200 { data: ticket }
+// Enforces ownership: a Requester may only view their own tickets; cross-owner
+// access is indistinguishable from a missing resource (404, D-03).
 // ---------------------------------------------------------------------------
 app.get("/api/tickets/:ticketId", async (req: Request, res: Response) => {
   try {
-    const requesterId = Number(req.query.requesterId);
-    if (req.query.requesterId === undefined || !Number.isInteger(requesterId) || requesterId <= 0) {
-      return res.status(400).json({
-        error: {
-          message: "Requester ID is required",
-          code: "MISSING_REQUESTER_ID",
-        },
+    const user = req.sessionUser;
+    if (!user) {
+      return res.status(401).json({
+        error: { message: "Authentication required", code: "UNAUTHORIZED" },
       });
     }
 
@@ -424,7 +691,7 @@ app.get("/api/tickets/:ticketId", async (req: Request, res: Response) => {
     const ticket = await getPrisma().ticket.findUnique({
       where: { id: ticketId },
       include: {
-        requester: { select: { id: true, name: true, email: true } },
+        submitter: { select: { id: true, name: true, email: true } },
         category: { select: { id: true, name: true } },
         relatedSystem: { select: { id: true, name: true } },
         attachments: {
@@ -449,12 +716,9 @@ app.get("/api/tickets/:ticketId", async (req: Request, res: Response) => {
       });
     }
 
-    if (ticket.requesterId !== requesterId) {
-      return res.status(403).json({
-        error: {
-          message: "You do not have permission to view this ticket",
-          code: "FORBIDDEN",
-        },
+    if (user.role === UserRole.REQUESTER && ticket.submittedById !== user.id) {
+      return res.status(404).json({
+        error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
       });
     }
 
@@ -473,18 +737,17 @@ app.get("/api/tickets/:ticketId", async (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 // Upload Attachment (AC-06 / BR-12,13,14)
 // POST /api/tickets/:ticketId/attachments (multipart/form-data)
-//   fields: file (required), requesterId (required)
+//   fields: file (required)
 // Validates MIME type, size (<= 5 MB), ticket ownership, and the active
 // five-attachment limit. The stored name is a UUID; the original filename is
 // preserved for display. 201 with attachment metadata.
 // ---------------------------------------------------------------------------
 app.post(
   "/api/tickets/:ticketId/attachments",
+  requireRole(UserRole.REQUESTER),
   upload.single("file"),
   async (req: Request, res: Response) => {
     try {
-      const body = req.body ?? {};
-
       if (!req.file) {
         res.status(400).json({
           error: { message: "No file provided", code: "MISSING_FILE" },
@@ -492,20 +755,15 @@ app.post(
         return;
       }
 
-      const requesterId = Number(body.requesterId);
-      if (body.requesterId === undefined || !Number.isInteger(requesterId) || requesterId <= 0) {
-        res.status(400).json({
-          error: { message: "Requester ID is required", code: "MISSING_REQUESTER_ID" },
+      const requesterId = req.sessionUser?.id;
+      if (requesterId === undefined) {
+        res.status(401).json({
+          error: { message: "Authentication required", code: "UNAUTHORIZED" },
         });
         return;
       }
 
-      const detailRefs = await resolveTicketForRoute(
-        req,
-        res,
-        requesterId,
-        "You do not have permission to add attachments to this ticket"
-      );
+      const detailRefs = await resolveTicketForRoute(req, res, requesterId);
       if (!detailRefs) return;
 
       const activeCount = await getPrisma().attachment.count({
@@ -559,26 +817,21 @@ app.post(
 
 // ---------------------------------------------------------------------------
 // Get Attachment Metadata (AC-06 / AC-07)
-// GET /api/tickets/:ticketId/attachments?requesterId=:id[&includeRemoved=true]
+// GET /api/tickets/:ticketId/attachments[&includeRemoved=true]
 // Returns attachment metadata for the owner's ticket; soft-removed records are
 // hidden by default and shown only when includeRemoved=true.
 // ---------------------------------------------------------------------------
 app.get("/api/tickets/:ticketId/attachments", async (req: Request, res: Response) => {
   try {
-    const requesterId = Number(req.query.requesterId);
-    if (req.query.requesterId === undefined || !Number.isInteger(requesterId) || requesterId <= 0) {
-      res.status(400).json({
-        error: { message: "Requester ID is required", code: "MISSING_REQUESTER_ID" },
+    const requesterId = req.sessionUser?.id;
+    if (requesterId === undefined) {
+      res.status(401).json({
+        error: { message: "Authentication required", code: "UNAUTHORIZED" },
       });
       return;
     }
 
-    const detailRefs = await resolveTicketForRoute(
-      req,
-      res,
-      requesterId,
-      "You do not have permission to view these attachments"
-    );
+    const detailRefs = await resolveTicketForRoute(req, res, requesterId);
     if (!detailRefs) return;
 
     const includeRemoved = req.query.includeRemoved === "true";
@@ -622,16 +875,16 @@ app.get("/api/tickets/:ticketId/attachments", async (req: Request, res: Response
 
 // ---------------------------------------------------------------------------
 // Download Attachment (AC-06 / BR-23)
-// GET /api/attachments/:attachmentId/download?requesterId=:id
+// GET /api/attachments/:attachmentId/download
 // Streams the stored file when owned and active. Removed attachments are not
 // downloadable (AC-07).
 // ---------------------------------------------------------------------------
 app.get("/api/attachments/:attachmentId/download", async (req: Request, res: Response) => {
   try {
-    const requesterId = Number(req.query.requesterId);
-    if (req.query.requesterId === undefined || !Number.isInteger(requesterId) || requesterId <= 0) {
-      res.status(400).json({
-        error: { message: "Requester ID is required", code: "MISSING_REQUESTER_ID" },
+    const requesterId = req.sessionUser?.id;
+    if (requesterId === undefined) {
+      res.status(401).json({
+        error: { message: "Authentication required", code: "UNAUTHORIZED" },
       });
       return;
     }
@@ -646,7 +899,7 @@ app.get("/api/attachments/:attachmentId/download", async (req: Request, res: Res
 
     const attachment = await getPrisma().attachment.findUnique({
       where: { id: attachmentId },
-      include: { ticket: { select: { requesterId: true } } },
+      include: { ticket: { select: { submittedById: true } } },
     });
 
     if (!attachment) {
@@ -656,12 +909,9 @@ app.get("/api/attachments/:attachmentId/download", async (req: Request, res: Res
       return;
     }
 
-    if (attachment.ticket.requesterId !== requesterId) {
-      res.status(403).json({
-        error: {
-          message: "You do not have permission to download this attachment",
-          code: "FORBIDDEN",
-        },
+    if (attachment.ticket.submittedById !== requesterId) {
+      res.status(404).json({
+        error: { message: "Attachment not found", code: "ATTACHMENT_NOT_FOUND" },
       });
       return;
     }
@@ -712,17 +962,20 @@ app.get("/api/attachments/:attachmentId/download", async (req: Request, res: Res
 // ---------------------------------------------------------------------------
 // Soft-Remove Attachment (AC-07 / BR-15,16)
 // DELETE /api/attachments/:attachmentId
-//   body: { requesterId (required), removalReason (optional, <= 500 chars) }
+//   body: { removalReason (optional, <= 500 chars) }
 // Marks isRemoved=true. The record (metadata) stays visible on the Ticket
 // Detail screen; the stored file remains on disk but is no longer downloadable.
 // ---------------------------------------------------------------------------
-app.delete("/api/attachments/:attachmentId", async (req: Request, res: Response) => {
+app.delete(
+  "/api/attachments/:attachmentId",
+  requireRole(UserRole.REQUESTER),
+  async (req: Request, res: Response) => {
   try {
     const body = req.body ?? {};
-    const requesterId = Number(body.requesterId);
-    if (body.requesterId === undefined || !Number.isInteger(requesterId) || requesterId <= 0) {
-      res.status(400).json({
-        error: { message: "Requester ID is required", code: "MISSING_REQUESTER_ID" },
+    const requesterId = req.sessionUser?.id;
+    if (requesterId === undefined) {
+      res.status(401).json({
+        error: { message: "Authentication required", code: "UNAUTHORIZED" },
       });
       return;
     }
@@ -750,7 +1003,7 @@ app.delete("/api/attachments/:attachmentId", async (req: Request, res: Response)
 
     const attachment = await getPrisma().attachment.findUnique({
       where: { id: attachmentId },
-      include: { ticket: { select: { requesterId: true } } },
+      include: { ticket: { select: { submittedById: true } } },
     });
 
     if (!attachment) {
@@ -760,12 +1013,9 @@ app.delete("/api/attachments/:attachmentId", async (req: Request, res: Response)
       return;
     }
 
-    if (attachment.ticket.requesterId !== requesterId) {
-      res.status(403).json({
-        error: {
-          message: "You do not have permission to remove this attachment",
-          code: "FORBIDDEN",
-        },
+    if (attachment.ticket.submittedById !== requesterId) {
+      res.status(404).json({
+        error: { message: "Attachment not found", code: "ATTACHMENT_NOT_FOUND" },
       });
       return;
     }
@@ -802,15 +1052,14 @@ app.delete("/api/attachments/:attachmentId", async (req: Request, res: Response)
   }
 });
 
-// Resolves requester + ticket ownership for ticket-scoped attachment routes.
-// Responds with the correct error and returns null when the request is
-// rejected (404 TICKET_NOT_FOUND / 403 FORBIDDEN).
+// Resolves ticket ownership for ticket-scoped attachment routes using the
+// session user. Cross-owner access is indistinguishable from a missing
+// resource (404, D-03); responds and returns null when rejected.
 async function resolveTicketForRoute(
   req: Request,
   res: Response,
-  requesterId: number,
-  forbiddenMessage: string
-): Promise<{ ticketId: number; requesterId: number } | null> {
+  userId: number
+): Promise<{ ticketId: number } | null> {
   const ticketId = Number(req.params.ticketId);
   if (!Number.isInteger(ticketId) || ticketId <= 0) {
     res.status(404).json({
@@ -821,24 +1070,17 @@ async function resolveTicketForRoute(
 
   const ticket = await getPrisma().ticket.findUnique({
     where: { id: ticketId },
-    select: { id: true, requesterId: true },
+    select: { id: true, submittedById: true },
   });
 
-  if (!ticket) {
+  if (!ticket || ticket.submittedById !== userId) {
     res.status(404).json({
       error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
     });
     return null;
   }
 
-  if (ticket.requesterId !== requesterId) {
-    res.status(403).json({
-      error: { message: forbiddenMessage, code: "FORBIDDEN" },
-    });
-    return null;
-  }
-
-  return { ticketId: ticket.id, requesterId };
+  return { ticketId: ticket.id };
 }
 
 // Central error handler: maps multer / file-type upload errors to the

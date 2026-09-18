@@ -163,13 +163,12 @@ export function TicketForm({ onCancel }: TicketFormProps) {
 
   async function uploadFiles(
     ticketId: number,
-    requesterId: number,
     targets: PendingAttachmentFile[]
   ) {
     for (const item of targets) {
       setAttachmentStatus(item.id, "uploading", { error: undefined });
       try {
-        await uploadAttachment(ticketId, requesterId, item.file);
+        await uploadAttachment(ticketId, item.file);
         setAttachmentStatus(item.id, "uploaded");
       } catch (err) {
         setAttachmentStatus(item.id, "failed", {
@@ -181,10 +180,10 @@ export function TicketForm({ onCancel }: TicketFormProps) {
   }
 
   async function retryAttachmentFile(id: string) {
-    if (!createdTicketId || !requester) return;
+    if (!createdTicketId) return;
     const item = attachmentFiles.find((f) => f.id === id);
     if (!item) return;
-    await uploadFiles(createdTicketId, requester.id, [item]);
+    await uploadFiles(createdTicketId, [item]);
   }
 
   function dismissSuccess() {
@@ -201,7 +200,6 @@ export function TicketForm({ onCancel }: TicketFormProps) {
     setServerError(null);
     try {
       const ticket = await createTicket({
-        requesterId: requester.id,
         categoryId: Number(categoryId),
         relatedSystemId: Number(relatedSystemId),
         summary: summary.trim(),
@@ -214,7 +212,6 @@ export function TicketForm({ onCancel }: TicketFormProps) {
       if (attachmentFiles.length > 0) {
         await uploadFiles(
           ticket.id,
-          requester.id,
           attachmentFiles.filter((f) => f.status !== "uploaded")
         );
       }
