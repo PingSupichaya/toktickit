@@ -122,6 +122,12 @@ afterAll(async () => {
     });
   }
   if (createdTicketIds.length > 0) {
+    await prisma.publicComment.deleteMany({
+      where: { ticketId: { in: createdTicketIds } },
+    });
+    await prisma.internalNote.deleteMany({
+      where: { ticketId: { in: createdTicketIds } },
+    });
     await prisma.ticket.deleteMany({
       where: { id: { in: createdTicketIds } },
     });
@@ -238,10 +244,37 @@ describe("API-43 — Requester full regression under authenticated identity (AC-
     expect(owned.body.data.relatedSystem).toHaveProperty("name");
     expect(owned.body.data).toHaveProperty("canIndicateResolved");
     expect(owned.body.data).not.toHaveProperty("notes");
+    expect(owned.body.data).not.toHaveProperty("indicatedResolvedAt");
 
     const hidden = await foreignAgent.get(`/api/tickets/${created.body.data.id}`);
     expect(hidden.status).toBe(404);
     expect(hidden.body.error.code).toBe("TICKET_NOT_FOUND");
+  });
+
+  it("indicate-resolved records once: a repeat call returns 409 and canIndicateResolved flips to false", async () => {
+    const agent = await loginAgent(app, EMAIL.requester);
+    const created = await apiCreate(agent, validPayload());
+    const ticketId = created.body.data.id;
+
+    const first = await agent
+      .post(`/api/tickets/${ticketId}/indicate-resolved`)
+      .set("Origin", TRUSTED_ORIGIN);
+    expect(first.status).toBe(201);
+    expect(first.body.data.content).toBe(
+      "The Requester indicated the problem appears resolved."
+    );
+
+    const repeat = await agent
+      .post(`/api/tickets/${ticketId}/indicate-resolved`)
+      .set("Origin", TRUSTED_ORIGIN);
+    expect(repeat.status).toBe(409);
+    expect(repeat.body.error.code).toBe("ALREADY_INDICATED_RESOLVED");
+
+    const detail = await agent.get(`/api/tickets/${ticketId}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.data.canIndicateResolved).toBe(false);
+    const commentIds = detail.body.data.comments.map((c: { id: number }) => c.id);
+    expect(commentIds).toContain(first.body.data.id);
   });
 
   it("attachment lifecycle under auth: upload → preview → soft-remove → removed download 403", async () => {

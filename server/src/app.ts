@@ -55,6 +55,14 @@ const INDICATABLE_STATUSES: TicketStatus[] = [
 ];
 const PAGE_SIZES = [10, 25, 50];
 
+// Raised inside the indicate-resolved transaction when a concurrent request
+// already recorded the action; mapped to 409 ALREADY_INDICATED_RESOLVED.
+class AlreadyIndicatedResolvedError extends Error {
+  constructor() {
+    super("indicate-resolved already recorded");
+  }
+}
+
 // Attachment upload helper (AC-06/FR-24/BR-13). Files are buffered in memory
 // and written to server/uploads only after all validation has passed.
 const upload = multer({
@@ -756,10 +764,12 @@ app.get("/api/tickets/:ticketId", async (req: Request, res: Response) => {
       canIndicateResolved:
         user.role === UserRole.REQUESTER &&
         ticket.submittedById === user.id &&
+        ticket.indicatedResolvedAt === null &&
         INDICATABLE_STATUSES.includes(ticket.currentStatus),
       comments: ticket.publicComments.map(toCommentShape),
     };
     delete data.publicComments;
+    delete data.indicatedResolvedAt;
     if (isStaff) {
       data.notes = ticket.internalNotes.map(toCommentShape);
     }
@@ -861,8 +871,10 @@ app.post("/api/tickets/:ticketId/comments", async (req: Request, res: Response) 
 // Requester "Problem Appears Resolved" (FR-12 / BR-21)
 // POST /api/tickets/:ticketId/indicate-resolved -> 201 { data: comment }
 // Records an automatic Public Comment (fixed system text); never changes the
-// Ticket status. Only the submitting Requester may use it, and only while the
-// Ticket is in a non-terminal state (409 TICKET_NOT_INDICATABLE otherwise).
+// Ticket status. Only the submitting Requester may use it, only while the
+// Ticket is in a non-terminal state (409 TICKET_NOT_INDICATABLE otherwise),
+// and only once: Ticket.indicatedResolvedAt is set in the same transaction
+// (409 ALREADY_INDICATED_RESOLVED on a repeat attempt).
 // ---------------------------------------------------------------------------
 app.post(
   "/api/tickets/:ticketId/indicate-resolved",
@@ -888,17 +900,48 @@ app.post(
         });
       }
 
-      const comment = await getPrisma().publicComment.create({
-        data: {
-          ticketId: access.ticketId,
-          authorId: user.id,
-          content: "The Requester indicated the problem appears resolved.",
-        },
-        include: { author: { select: { id: true, name: true } } },
+      if (access.indicatedResolvedAt) {
+        return res.status(409).json({
+          error: {
+            message: "You have already indicated this Ticket appears resolved",
+            code: "ALREADY_INDICATED_RESOLVED",
+          },
+        });
+      }
+
+      const db = getPrisma();
+      const comment = await db.$transaction(async (tx) => {
+        const existing = await tx.ticket.findUniqueOrThrow({
+          where: { id: access.ticketId },
+          select: { indicatedResolvedAt: true },
+        });
+        if (existing.indicatedResolvedAt) {
+          throw new AlreadyIndicatedResolvedError();
+        }
+        await tx.ticket.update({
+          where: { id: access.ticketId },
+          data: { indicatedResolvedAt: new Date() },
+        });
+        return tx.publicComment.create({
+          data: {
+            ticketId: access.ticketId,
+            authorId: user.id,
+            content: "The Requester indicated the problem appears resolved.",
+          },
+          include: { author: { select: { id: true, name: true } } },
+        });
       });
 
       res.status(201).json({ data: toCommentShape(comment) });
     } catch (err) {
+      if (err instanceof AlreadyIndicatedResolvedError) {
+        return res.status(409).json({
+          error: {
+            message: "You have already indicated this Ticket appears resolved",
+            code: "ALREADY_INDICATED_RESOLVED",
+          },
+        });
+      }
       console.error("Failed to record indicate-resolved:", err);
       res.status(500).json({
         error: {
@@ -1359,6 +1402,7 @@ async function resolveTicketAccess(
   ticketId: number;
   currentStatus: TicketStatus;
   ticketNumber: string;
+  indicatedResolvedAt: Date | null;
 } | null> {
   const ticketId = Number(req.params.ticketId);
   if (!Number.isInteger(ticketId) || ticketId <= 0) {
@@ -1377,6 +1421,7 @@ async function resolveTicketAccess(
       ticketNumber: true,
       submittedById: true,
       currentStatus: true,
+      indicatedResolvedAt: true,
     },
   });
 
@@ -1399,6 +1444,7 @@ async function resolveTicketAccess(
     ticketId: ticket.id,
     currentStatus: ticket.currentStatus,
     ticketNumber: ticket.ticketNumber,
+    indicatedResolvedAt: ticket.indicatedResolvedAt,
   };
 }
 
