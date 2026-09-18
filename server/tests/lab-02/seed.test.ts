@@ -87,12 +87,14 @@ describe("Seed data (T-022)", () => {
     });
   });
 
+  // Idempotency is asserted against the reference tables the re-seed upserts
+  // (categories, systems). Users and tickets are intentionally excluded: their
+  // row counts are mutated by every other API suite running in parallel against
+  // the same shared database, so an exact before/after count only races.
   it("is idempotent: re-running the seed does not duplicate records", async () => {
     const countsBefore = {
       categories: await prisma.category.count(),
       systems: await prisma.relatedSystem.count(),
-      users: await prisma.user.count(),
-      tickets: await prisma.ticket.count(),
     };
 
     await prisma.category.upsert({
@@ -104,8 +106,6 @@ describe("Seed data (T-022)", () => {
     const countsAfter = {
       categories: await prisma.category.count(),
       systems: await prisma.relatedSystem.count(),
-      users: await prisma.user.count(),
-      tickets: await prisma.ticket.count(),
     };
 
     expect(countsAfter).toEqual(countsBefore);

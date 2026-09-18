@@ -49,12 +49,23 @@ export interface RelatedSystem {
 
 export type RequestedPriority = "LOW" | "MEDIUM" | "HIGH";
 
+export type TicketStatus =
+  | "NEW"
+  | "OPEN"
+  | "IN_PROGRESS"
+  | "WAITING_FOR_REQUESTER"
+  | "RESOLVED"
+  | "CLOSED"
+  | "REOPENED"
+  | "CANCELLED";
+
 export interface Ticket {
   id: number;
   ticketNumber: string;
   submittedById: number;
   submitter: Requester;
   ownerId?: number | null;
+  owner?: { id: number; name: string; role: UserRole } | null;
   categoryId: number;
   category: Category;
   relatedSystemId: number;
@@ -62,6 +73,7 @@ export interface Ticket {
   summary: string;
   description: string;
   requestedPriority: RequestedPriority;
+  itPriority?: RequestedPriority;
   currentStatus: string;
   ticketDate: string;
   createdAt: string;
@@ -88,8 +100,29 @@ export interface Attachment {
   removalReason?: string | null;
 }
 
+export interface PublicComment {
+  id: number;
+  ticketId: number;
+  author: { id: number; name: string };
+  content: string;
+  createdAt: string;
+}
+
+export interface RequestRespondResult {
+  ticket: {
+    ticketId: number;
+    ticketNumber: string;
+    currentStatus: string;
+    updatedAt: string;
+  };
+  comment?: PublicComment;
+}
+
 export interface TicketDetail extends Ticket {
   attachments: Attachment[];
+  comments?: PublicComment[];
+  notes?: PublicComment[];
+  canIndicateResolved?: boolean;
 }
 
 export interface TicketSummary {
@@ -131,7 +164,16 @@ export interface TicketPage {
   pagination: PaginationMeta;
 }
 
-export const STATUS_OPTIONS = ["NEW"];
+export const STATUS_OPTIONS: TicketStatus[] = [
+  "NEW",
+  "OPEN",
+  "IN_PROGRESS",
+  "WAITING_FOR_REQUESTER",
+  "RESOLVED",
+  "CLOSED",
+  "REOPENED",
+  "CANCELLED",
+];
 
 export const SORT_OPTIONS = [
   { value: "date-desc", label: "Newest first" },
@@ -445,4 +487,47 @@ export async function changePassword(
     method: "POST",
     body: JSON.stringify({ currentPassword, newPassword }),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Lab 3 — Public Comments and Requester actions (FR-12 / FR-13)
+// ---------------------------------------------------------------------------
+
+// FR-13 / BR-23 — post a Public Comment on an owned Ticket (1-2000 chars).
+export async function postComment(
+  ticketId: number,
+  content: string
+): Promise<PublicComment> {
+  return authJson<PublicComment>(`/api/tickets/${ticketId}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  });
+}
+
+// FR-12 / BR-21 — record the Requester's "Problem Appears Resolved" indicator
+// as an automatic Public Comment. The Ticket status is never changed.
+export async function indicateResolved(
+  ticketId: number
+): Promise<PublicComment> {
+  return authJson<PublicComment>(
+    `/api/tickets/${ticketId}/indicate-resolved`,
+    { method: "POST" }
+  );
+}
+
+// FR-13 / BR-22 — provide requested information, moving the own Ticket from
+// WAITING_FOR_REQUESTER to OPEN. Optional content becomes a Public Comment.
+export async function requesterRespond(
+  ticketId: number,
+  content?: string
+): Promise<RequestRespondResult> {
+  return authJson<RequestRespondResult>(
+    `/api/tickets/${ticketId}/requester-respond`,
+    {
+      method: "POST",
+      ...(content !== undefined && content.trim() !== ""
+        ? { body: JSON.stringify({ content }) }
+        : {}),
+    }
+  );
 }
