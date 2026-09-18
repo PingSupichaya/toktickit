@@ -4,12 +4,14 @@ import { getPrisma } from "../src/prisma.js";
 // ---------------------------------------------------------------------------
 // Lab 3 seed (specification.md §7.5)
 // ---------------------------------------------------------------------------
-// All seeded accounts use the documented shared development initial password:
+// Seeded accounts use one of two documented development passwords:
 //
-//     INITIAL_PASSWORD = "ChangeMe123!"
+//     INITIAL_PASSWORD = "ChangeMe123!" → mustChangePassword = true
+//     DEMO_PASSWORD    = "Password123!" → mustChangePassword = false
 //
-// Every seeded / migrated account is created with `mustChangePassword = true`,
-// so the first login routes to the Change Password screen (D-12, BR-02).
+// Accounts with `mustChangePassword = true` route to the Change Password
+// screen on first login (D-12, BR-02); one ready-to-use demo account per role
+// (Alice / Frank / Omar) can sign in directly without changing the password.
 // These credentials are for LOCAL DEVELOPMENT ONLY — never commit real
 // personal passwords. Emails follow the `first.last@mail.kmutt.ac.th` pattern
 // already used by the Lab 2 seed.
@@ -17,11 +19,14 @@ import { getPrisma } from "../src/prisma.js";
 // The seed is idempotent: categories/related systems/users/tickets are upserted
 // by their natural key and comments/notes are only inserted when the exact
 // (ticket, author, content) triple does not already exist. Re-running the seed
-// never duplicates rows (MIG-01).
+// never duplicates rows, and seeded user credentials are restored to the
+// documented baseline so the dataset stays deterministic for the test suite
+// (MIG-01).
 // ---------------------------------------------------------------------------
 
 const BCRYPT_COST = 12; // BR-09: bcrypt, cost factor 12
 const INITIAL_PASSWORD = "ChangeMe123!";
+const DEMO_PASSWORD = "Password123!";
 
 const prisma = getPrisma();
 
@@ -30,23 +35,27 @@ type SeedUser = {
   email: string;
   role: "REQUESTER" | "IT_STAFF" | "ADMIN";
   isActive: boolean;
+  mustChangePassword?: boolean;
 };
 
 const seedUsers: SeedUser[] = [
-  // Migrated Requesters (≥4 active + 1 inactive)
-  { name: "Alice Johnson",  email: "alice.john@mail.kmutt.ac.th",   role: "REQUESTER", isActive: true  },
+  // Migrated Requesters (≥4 active + 1 inactive);
+  // Alice is a ready-to-use demo account (mustChangePassword = false).
+  { name: "Alice Johnson",  email: "alice.john@mail.kmutt.ac.th",   role: "REQUESTER", isActive: true, mustChangePassword: false },
   { name: "Bob Smith",      email: "bob.smit@mail.kmutt.ac.th",     role: "REQUESTER", isActive: true  },
   { name: "Carol Martinez", email: "carol.mart@mail.kmutt.ac.th",   role: "REQUESTER", isActive: true  },
   { name: "David Lee",      email: "david.lee1@mail.kmutt.ac.th",   role: "REQUESTER", isActive: true  },
   { name: "Eve Turner",     email: "eve.turn@mail.kmutt.ac.th",     role: "REQUESTER", isActive: false },
-  // IT Staff (≥3 active + 1 inactive)
-  { name: "Frank Nguyen",   email: "frank.ngu@mail.kmutt.ac.th",    role: "IT_STAFF",  isActive: true  },
+  // IT Staff (≥3 active + 1 inactive);
+  // Frank is a ready-to-use demo account (mustChangePassword = false).
+  { name: "Frank Nguyen",   email: "frank.ngu@mail.kmutt.ac.th",    role: "IT_STAFF",  isActive: true, mustChangePassword: false },
   { name: "Grace Patel",    email: "grace.pat@mail.kmutt.ac.th",    role: "IT_STAFF",  isActive: true  },
   { name: "Hannah Kim",     email: "hannah.kim@mail.kmutt.ac.th",   role: "IT_STAFF",  isActive: true  },
   { name: "Ivan Rossi",     email: "ivan.ros@mail.kmutt.ac.th",     role: "IT_STAFF",  isActive: false },
   // Administrators (2 active — one spare so the last-active-Administrator
-  // safety rule and self-deactivation tests are possible)
-  { name: "Omar Farouk",    email: "omar.far@mail.kmutt.ac.th",     role: "ADMIN",     isActive: true  },
+  // safety rule and self-deactivation tests are possible);
+  // Omar is a ready-to-use demo account (mustChangePassword = false).
+  { name: "Omar Farouk",    email: "omar.far@mail.kmutt.ac.th",     role: "ADMIN",     isActive: true, mustChangePassword: false },
   { name: "Priya Nair",     email: "priya.nai@mail.kmutt.ac.th",    role: "ADMIN",     isActive: true  },
 ];
 
@@ -441,21 +450,29 @@ async function main() {
     )
   );
 
-  // Users. Requesters that were migrated from Lab 2 are preserved as-is
-  // (`update: {}`); new accounts are created with the documented development
-  // initial password and `mustChangePassword = true`.
+  // Users. Requesters that were migrated from Lab 2 are preserved as-is;
+  // their credential fields (passwordHash, mustChangePassword) are restored to
+  // the documented seed baseline so the set of ready-to-use demo accounts stays
+  // deterministic on every run.
+  const seededCredential = (u: SeedUser) => ({
+    passwordHash: bcrypt.hashSync(
+      u.mustChangePassword === false ? DEMO_PASSWORD : INITIAL_PASSWORD,
+      BCRYPT_COST
+    ),
+    mustChangePassword: u.mustChangePassword ?? true,
+  });
+
   await prisma.$transaction(
     seedUsers.map((u) =>
       prisma.user.upsert({
         where: { email: u.email },
-        update: {},
+        update: seededCredential(u),
         create: {
           name: u.name,
           email: u.email,
           role: u.role,
           isActive: u.isActive,
-          passwordHash: bcrypt.hashSync(INITIAL_PASSWORD, BCRYPT_COST),
-          mustChangePassword: true,
+          ...seededCredential(u),
         },
       })
     )
@@ -568,11 +585,13 @@ async function report() {
 main()
   .then(() => {
     console.log(
-      `\nSeed complete. All accounts use the shared development initial password` +
-        ` "${INITIAL_PASSWORD}" and must change it at first login (mustChangePassword).\n` +
-        `  e.g. alice.john@mail.kmutt.ac.th / ${INITIAL_PASSWORD} (Requester),\n` +
-        `       frank.ngu@mail.kmutt.ac.th     / ${INITIAL_PASSWORD} (IT Staff),\n` +
-        `       omar.far@mail.kmutt.ac.th      / ${INITIAL_PASSWORD} (Admin).`
+      `\nSeed complete. Ready-to-use demo accounts (mustChangePassword = false),\n` +
+        `  e.g. alice.john@mail.kmutt.ac.th / ${DEMO_PASSWORD} (Requester),\n` +
+        `       frank.ngu@mail.kmutt.ac.th     / ${DEMO_PASSWORD} (IT Staff),\n` +
+        `       omar.far@mail.kmutt.ac.th      / ${DEMO_PASSWORD} (Admin).\n` +
+        `All other accounts use the initial password "${INITIAL_PASSWORD}" and\n` +
+        `are marked mustChangePassword = true (first login routes to Change\n` +
+        `Password). e.g. bob.smit@mail.kmutt.ac.th / ${INITIAL_PASSWORD}.`
     );
   })
   .catch((e) => {

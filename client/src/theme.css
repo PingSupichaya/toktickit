@@ -244,9 +244,27 @@ button {
   color: var(--color-text-secondary);
 }
 
-.field--error .field__control {
-  border-color: var(--color-error);
-  border-width: 2px;
+.field__control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+}
+
+.field__input-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.field__input-wrap:has(.password-toggle) > .input {
+  padding-right: 48px;
+}
+
+.field__control > .field__status,
+.field__control > .field__hint,
+.field__control > .field__error {
+  flex-basis: 100%;
 }
 
 .field__error {
@@ -1924,4 +1942,201 @@ button {
   display: flex;
   justify-content: flex-end;
   margin-top: var(--space-2);
+}
+
+/* ---------------------------------------------------------------------------
+   Lab 3 — authentication & application shell additions
+   --------------------------------------------------------------------------- */
+
+:root {
+  --color-role-requester-bg: #f0f0f0;
+  --color-role-requester-text: #5a6f65;
+  --color-role-staff-bg: #eff6ff;
+  --color-role-staff-text: #1d4ed8;
+  --color-role-admin-bg: #fef3c7;
+  --color-role-admin-text: #92400e;
+}
+
+/* Validation red border on inputs inside an errored field. */
+.field--error .input {
+  border-color: var(--color-error);
+  border-width: 2px;
+}
+
+/* Auth screens (ui-spec 5.1 / 5.2) */
+.auth-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background-color: var(--color-bg-page);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  background-color: var(--color-bg-surface);
+  padding: var(--space-8);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-card);
+}
+
+.auth-card--md {
+  max-width: 480px;
+}
+
+.auth {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.auth-brand {
+  margin: 0;
+  color: var(--color-primary);
+  font-size: 1.75rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.auth-subtitle {
+  margin: 0 0 var(--space-2);
+  font-size: 1rem;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.auth-form .btn {
+  margin-top: var(--space-2);
+}
+
+.auth-banner {
+  margin-bottom: 0;
+}
+
+.auth-logout {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-2);
+}
+
+/* Hide the native password reveal/clear glyphs (Edge/IE) so only our toggle shows */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+}
+
+/* Password show/hide toggle (ui-spec 5.1) */
+.password-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-control);
+  color: var(--color-text-secondary);
+}
+
+.password-toggle:hover:not(:disabled) {
+  background-color: var(--color-pale-green);
+  color: var(--color-primary-hover);
+}
+
+/* Live password rule checklist (ui-spec 5.2) */
+.password-rules {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.password-rules__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.password-rules__mark {
+  width: 1em;
+  text-align: center;
+}
+
+.password-rules__item.is-met {
+  color: var(--color-success);
+  font-weight: 500;
+}
+
+/* Role badge (ui-spec section 3) */
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.role-badge--REQUESTER {
+  background-color: var(--color-role-requester-bg);
+  color: var(--color-role-requester-text);
+}
+
+.role-badge--IT_STAFF {
+  background-color: var(--color-role-staff-bg);
+  color: var(--color-role-staff-text);
+}
+
+.role-badge--ADMIN {
+  background-color: var(--color-role-admin-bg);
+  color: var(--color-role-admin-text);
+}
+
+/* AppShell header (ui-spec section 4) */
+.app-header__user-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.app-header__user-label {
+  opacity: 0.85;
+}
+
+.app-header__logout {
+  margin-left: var(--space-4);
+  padding: 8px 16px;
+  color: #fff;
+  background-color: transparent;
+  border: 1px solid #fff;
+  border-radius: var(--radius-control);
+}
+
+.app-header__logout:hover:not(:disabled) {
+  color: var(--color-primary);
+  background-color: var(--color-pale-green);
+  border-color: var(--color-pale-green);
+}
+
+@media (max-width: 767px) {
+  .app-header__right .app-header__logout {
+    display: none;
+  }
 }

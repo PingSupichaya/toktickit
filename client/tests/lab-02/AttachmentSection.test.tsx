@@ -39,8 +39,7 @@ const active2: Attachment = {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(api.downloadAttachmentUrl).mockImplementation(
-    (id, requesterId) =>
-      `http://localhost:3000/api/attachments/${id}/download?requesterId=${requesterId}`
+    (id) => `http://localhost:3000/api/attachments/${id}/download`
   );
   vi.mocked(api.formatTicketDate).mockImplementation(() => "4 Sep 2026");
   vi.mocked(api.removeAttachment).mockResolvedValue({
@@ -63,7 +62,7 @@ const user = userEvent.setup();
 
 function renderSection(attachments: Attachment[]) {
   return render(
-    <AttachmentSection ticketId={1} requesterId={1} attachments={attachments} />
+    <AttachmentSection ticketId={1} attachments={attachments} />
   );
 }
 
@@ -81,7 +80,7 @@ describe("AttachmentSection (T-021) - AC-06 / AC-07", () => {
     });
     expect(downloadLink).toHaveAttribute(
       "href",
-      "http://localhost:3000/api/attachments/51/download?requesterId=1"
+      "http://localhost:3000/api/attachments/51/download"
     );
     expect(
       within(activeRow).getByTestId("remove-attachment-btn")
@@ -144,7 +143,6 @@ describe("AttachmentSection (T-021) - AC-06 / AC-07", () => {
     });
     expect(vi.mocked(api.removeAttachment)).toHaveBeenCalledWith(
       51,
-      1,
       "Wrong file"
     );
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -216,7 +214,7 @@ describe("AttachmentSection (T-021) - AC-06 / AC-07", () => {
     await waitFor(() => {
       expect(screen.getByTestId("attachment-60")).toBeInTheDocument();
     });
-    expect(vi.mocked(api.uploadAttachment)).toHaveBeenCalledWith(1, 1, file);
+    expect(vi.mocked(api.uploadAttachment)).toHaveBeenCalledWith(1, file);
     expect(screen.getByTestId("attachment-count")).toHaveTextContent(
       "Attachments (2 active)"
     );

@@ -129,7 +129,6 @@ export function MyTickets({ onCreateTicket, onOpenTicket }: MyTicketsProps) {
 
     let cancelled = false;
     fetchTickets({
-      requesterId: requester.id,
       search: debouncedSearch || undefined,
       categoryId: filters.categoryId === "" ? undefined : Number(filters.categoryId),
       relatedSystemId:

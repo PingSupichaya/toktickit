@@ -8,16 +8,25 @@ import { TicketDetail } from "../../src/components/features/TicketDetail.js";
 
 vi.mock("../../src/api.js");
 
-const activeRequesters = [
-  { id: 1, name: "Alice Johnson", email: "alice@example.com" },
-  { id: 2, name: "Bob Smith", email: "bob@example.com" },
-];
+let currentUser: api.AuthUser | null = {
+  id: 1,
+  name: "Alice Johnson",
+  email: "alice@example.com",
+  role: "REQUESTER",
+  isActive: true,
+};
+
+// RequesterProvider derives the requester from the authenticated user, so the
+// harness stubs AuthContext with the signed-in user.
+vi.mock("../../src/context/AuthContext.js", () => ({
+  useAuth: () => ({ user: currentUser }),
+}));
 
 const detailTicket: TicketDetailData = {
   id: 1,
   ticketNumber: "TKT-000001",
-  requesterId: 1,
-  requester: { id: 1, name: "Alice Johnson", email: "alice@example.com" },
+  submittedById: 1,
+  submitter: { id: 1, name: "Alice Johnson", email: "alice@example.com" },
   categoryId: 2,
   category: { id: 2, name: "Hardware" },
   relatedSystemId: 2,
@@ -55,17 +64,10 @@ const onBack = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
-  localStorage.clear();
-  localStorage.setItem(
-    "toktickit.requester",
-    JSON.stringify({ id: 1, name: "Alice Johnson", email: "alice@example.com" })
-  );
-  vi.mocked(api.fetchRequesters).mockResolvedValue(activeRequesters);
   vi.mocked(api.fetchTicketDetail).mockResolvedValue(detailTicket);
   vi.mocked(api.formatTicketDate).mockImplementation(() => "4 Sep 2026");
   vi.mocked(api.downloadAttachmentUrl).mockImplementation(
-    (id, requesterId) =>
-      `http://localhost:3000/api/attachments/${id}/download?requesterId=${requesterId}`
+    (id) => `http://localhost:3000/api/attachments/${id}/download`
   );
 });
 
@@ -163,30 +165,13 @@ describe("RequesterTicketDetail (T-016) - AC-03", () => {
     expect(onBack).toHaveBeenCalled();
   });
 
-  it("calls fetchTicketDetail with the ticket and requester ids", async () => {
+  it("calls fetchTicketDetail with only the ticket id (submitter is session-scoped)", async () => {
     await openDetail();
 
-    expect(vi.mocked(api.fetchTicketDetail)).toHaveBeenCalledWith(1, 1);
+    expect(vi.mocked(api.fetchTicketDetail)).toHaveBeenCalledWith(1);
   });
 
-  it("shows the ownership error state for a 403 and can navigate back", async () => {
-    vi.mocked(api.fetchTicketDetail).mockRejectedValue(
-      Object.assign(
-        new Error("You do not have permission to view this ticket"),
-        { status: 403, code: "FORBIDDEN" }
-      )
-    );
-
-    renderDetail();
-    await screen.findByText("You do not have permission to view this ticket.");
-
-    await user.click(
-      screen.getByRole("button", { name: "Back to My Tickets" })
-    );
-    expect(onBack).toHaveBeenCalled();
-  });
-
-  it("shows the not-found error state for a 404", async () => {
+  it("shows the not-found error state for cross-owner access (404, D-03)", async () => {
     vi.mocked(api.fetchTicketDetail).mockRejectedValue(
       Object.assign(new Error("Ticket not found"), {
         status: 404,

@@ -211,7 +211,7 @@ AC IDs match `specification.md` §9 exactly. Every AC maps to at least one autom
 Verified by manual inspection and Playwright screenshot capture, per `ui-spec.md` §12.
 
 ### Playwright Screenshots Required — `artifacts/lab-03/screenshots/`
-- [ ] Authentication — desktop login, validation, error, change-password (desktop + mobile)
+- [x] Authentication — desktop login, validation, error, change-password (desktop + mobile) (`artifacts/lab-03/screenshots/authentication/`)
 - [ ] Staff queue — desktop table, filters, no-results, tablet, mobile cards
 - [ ] Staff ticket detail — tabs (comments / notes), operational panel, mobile layout, forbidden/not-found state
 - [ ] User management — list, create panel, edit panel, self-deactivation hint, mobile cards
@@ -249,9 +249,11 @@ cd client
 npm run test                 # Vitest — all client tests (includes client/tests/lab-03)
 
 # --- End-to-end tests (Playwright) ---
-# From the repository root; requires the API server on :3000 (playwright.config.ts
-# starts the client; the API is reused when already running, otherwise start npm run dev in server/)
-npx playwright test                           # testDir = e2e/, runs all lab specs
+# From the repository root. `playwright.config.ts` uses a dedicated client port
+# (:5174) and server :3000; the E2E spec reseeds its own fixtures first
+# (server `prisma:seed:e2e`). CORS/CSRF trusted origins include :5174 —
+# set TRUSTED_ORIGINS accordingly in server/.env.
+npx playwright test                           # testDir = e2e/lab-03
 npx playwright test e2e/lab-03/authentication.spec.ts
 npx playwright test --headed                  # watch the browser
 npx playwright test --reporter=html           # HTML report
@@ -260,27 +262,39 @@ npx playwright test --reporter=html           # HTML report
 cd server
 npx prisma migrate dev
 npm run prisma:seed                            # must be idempotent (MIG-01)
+npm run prisma:seed:e2e                        # E2E auth fixture users (idempotent)
 ```
 
 ---
 
 ## 6. Final Results
 
-_Filled in on the final `main` branch before submission._
+_Scope: this sprint ships authentication, password hygiene, and role-gating (FR-01…FR-07) on the authenticated foundation. The queue, staff ticket detail, user administration, and requester-regression items in §2 remain pending by design (see §7 and the sprint scope note)._
+
+### Verified on the current branch
+
+| Suite | Command | Result |
+|-------|---------|--------|
+| Server suite (lab-01 + lab-02 + lab-03) | `cd server && npm test` | **13/13 files, 107/107 pass** (lab-01: health, categories; lab-02: seed + T-004…T-020 regression, auth-bound; lab-03: API-01…API-14, UNIT-01/02/05/06) |
+| Client suite (lab-01 + lab-02 + lab-03) | `cd client && npm test` | **10/10 files, 62/62 pass** (incl. lab-01 App auth flow; lab-02 regression; lab-03 UI-01…UI-05) |
+| E2E (lab-03 auth) | `npx playwright test` (repo root) | **4/4 pass** (E2E-01, E2E-02, E2E-03, E2E-08) |
+
+### Result summary
 
 | Type | Total | Pass | Fail | Pending |
 |------|-------|------|------|---------|
-| Unit | 6 | 0 | 0 | 6 |
-| API | 43 | 0 | 0 | 43 |
+| Unit (lab-03) | 6 | 4 | 0 | 2 |
+| API (lab-03) | 43 | 14 | 0 | 29 |
 | MIG | 4 | 0 | 0 | 4 |
-| UI | 13 | 0 | 0 | 13 |
-| E2E | 11 | 0 | 0 | 11 |
-| **Total** | **77** | **0** | **0** | **77** |
+| UI | 13 | 5 | 0 | 8 |
+| E2E | 11 | 4 | 0 | 7 |
+| **Total** | **77** | **27** | **0** | **50** |
 
 ### Notes
-- Server suite (`server npm run test`) executes API-01…API-43, MIG-01…MIG-04, and UNIT-01…UNIT-06 plus the Lab 2 regression suite.
-- Client suite (`client npm run test`) executes UI-01…UI-13.
-- E2E suite (`e2e/lab-03/`) executes E2E-01…E2E-11 in a real Chromium browser and writes all `artifacts/lab-03/screenshots/` evidence with no skipped tests and no uncaught page/console errors.
+- The "Pending" rows (staff queue, staff ticket detail, comments/notes, user administration, requester regression, MIG) map to server handlers that remain stubbed/deferred under the strict-scope decision; their API/UI/E2E files are specified in §2 and will run once those handlers are migrated.
+- The full server and client suites are green: the Lab 1/2 tests were rewritten for the Lab 3 data model — the ticket submitter/owner comes from the session (`submittedById`/`ownerId`), payloads no longer carry `requesterId`, and cross-owner access is asserted as 404 (D-03). Tests for the removed `GET /api/requesters` endpoint and Requester selector were deleted.
+- Server API tests that drive ticket/attachment flows create dedicated active users (`mustChangePassword = false`) in `beforeAll`, log in via Supertest agents, and clean them up in `afterAll` (shared helper in `server/tests/helpers/testAuth.ts`).
+- E2E runs against a dedicated Vite client port `:5174` (configurable via `playwright.config.ts`) so another project's dev server on `:5173` cannot be picked up by `reuseExistingServer`.
 
 ---
 

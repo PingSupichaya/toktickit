@@ -415,7 +415,7 @@ The seed script must be idempotent (safe to run repeatedly). It creates:
 - Tickets distributed across Requesters, statuses, priorities, and assigned/unassigned ownership
 - Example Public Comments and Internal Notes that contain no sensitive information
 
-All seeded user accounts are created with `mustChangePassword = true` and a documented, shared development initial password (e.g., `ChangeMe123!`, perhaps per-user variants for uniqueness testing). Seeded credentials are for local development only and are documented in the seed file and README; real personal passwords are never committed.
+Most seeded accounts are created with `mustChangePassword = true` and the documented development initial password (e.g., `ChangeMe123!`); one ready-to-use demo account per role is seeded with `mustChangePassword = false` and a distinct documented password so the app can be explored without the forced change (both flows remain demonstrable). Seeded credentials are for local development only and are documented in the seed file; real personal passwords are never committed.
 
 ---
 

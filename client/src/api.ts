@@ -1,5 +1,36 @@
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
+export type UserRole = "REQUESTER" | "IT_STAFF" | "ADMIN";
+
+export interface AuthUser {
+  id: number;
+  name: string;
+  email: string;
+  role: UserRole;
+  isActive: boolean;
+}
+
+export interface AuthResult {
+  user: AuthUser;
+  mustChangePassword: boolean;
+}
+
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+
+  constructor(status: number, message: string, code?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
+interface ErrorBody {
+  error?: { message?: string; code?: string };
+}
+
 export interface Category {
   id: number;
   name: string;
@@ -21,8 +52,9 @@ export type RequestedPriority = "LOW" | "MEDIUM" | "HIGH";
 export interface Ticket {
   id: number;
   ticketNumber: string;
-  requesterId: number;
-  requester: Requester;
+  submittedById: number;
+  submitter: Requester;
+  ownerId?: number | null;
   categoryId: number;
   category: Category;
   relatedSystemId: number;
@@ -37,7 +69,6 @@ export interface Ticket {
 }
 
 export interface CreateTicketInput {
-  requesterId: number;
   categoryId: number;
   relatedSystemId: number;
   summary: string;
@@ -75,7 +106,6 @@ export interface TicketSummary {
 }
 
 export interface TicketQuery {
-  requesterId: number;
   search?: string;
   categoryId?: number;
   relatedSystemId?: number;
@@ -136,12 +166,16 @@ export interface TicketsResponse {
 // Issue 2 + Issue 4 — call the backend.
 // Throwing on failure lets the UI show a single Offline/error state.
 export async function checkSystem(): Promise<SystemStatus> {
-  const healthRes = await fetch(`${API_URL}/api/health`);
+  const healthRes = await fetch(`${API_URL}/api/health`, {
+    credentials: "include",
+  });
   if (!healthRes.ok) {
     throw new Error(`Health check failed with status ${healthRes.status}`);
   }
 
-  const categoriesRes = await fetch(`${API_URL}/api/categories`);
+  const categoriesRes = await fetch(`${API_URL}/api/categories`, {
+    credentials: "include",
+  });
   if (!categoriesRes.ok) {
     throw new Error(`Categories request failed with status ${categoriesRes.status}`);
   }
@@ -150,19 +184,11 @@ export async function checkSystem(): Promise<SystemStatus> {
   return { online: true, categories: categoriesBody.data };
 }
 
-// FR-02 / BR-05 — fetch only ACTIVE development Requesters for the selector.
-export async function fetchRequesters(): Promise<Requester[]> {
-  const res = await fetch(`${API_URL}/api/requesters`);
-  if (!res.ok) {
-    throw new Error(`Requesters request failed with status ${res.status}`);
-  }
-  const body = (await res.json()) as DataResponse<Requester[]>;
-  return body.data;
-}
-
 // FR-08 / BR-08 — fetch ACTIVE Categories for the Create Ticket dropdown.
 export async function fetchCategories(): Promise<Category[]> {
-  const res = await fetch(`${API_URL}/api/categories`);
+  const res = await fetch(`${API_URL}/api/categories`, {
+    credentials: "include",
+  });
   if (!res.ok) {
     throw new Error(`Categories request failed with status ${res.status}`);
   }
@@ -172,7 +198,9 @@ export async function fetchCategories(): Promise<Category[]> {
 
 // FR-08 / BR-08 — fetch ACTIVE Related Systems for the Create Ticket dropdown.
 export async function fetchRelatedSystems(): Promise<RelatedSystem[]> {
-  const res = await fetch(`${API_URL}/api/related-systems`);
+  const res = await fetch(`${API_URL}/api/related-systems`, {
+    credentials: "include",
+  });
   if (!res.ok) {
     throw new Error(`Related systems request failed with status ${res.status}`);
   }
@@ -184,7 +212,7 @@ export async function fetchRelatedSystems(): Promise<RelatedSystem[]> {
 // sorting, and pagination (GET /api/tickets). Returns the page list +
 // pagination metadata so the UI can render filters and pager controls.
 export async function fetchTickets(query: TicketQuery): Promise<TicketPage> {
-  const params = new URLSearchParams({ requesterId: String(query.requesterId) });
+  const params = new URLSearchParams();
   if (query.search) params.set("search", query.search);
   if (query.categoryId !== undefined) params.set("categoryId", String(query.categoryId));
   if (query.relatedSystemId !== undefined) params.set("relatedSystemId", String(query.relatedSystemId));
@@ -195,7 +223,9 @@ export async function fetchTickets(query: TicketQuery): Promise<TicketPage> {
   if (query.page !== undefined) params.set("page", String(query.page));
   if (query.pageSize !== undefined) params.set("pageSize", String(query.pageSize));
 
-  const res = await fetch(`${API_URL}/api/tickets?${params.toString()}`);
+  const res = await fetch(`${API_URL}/api/tickets?${params.toString()}`, {
+    credentials: "include",
+  });
   if (!res.ok) {
     throw new Error(`Tickets request failed with status ${res.status}`);
   }
@@ -208,6 +238,7 @@ export async function fetchTickets(query: TicketQuery): Promise<TicketPage> {
 export async function createTicket(input: CreateTicketInput): Promise<Ticket> {
   const res = await fetch(`${API_URL}/api/tickets`, {
     method: "POST",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
@@ -229,18 +260,18 @@ export async function createTicket(input: CreateTicketInput): Promise<Ticket> {
 
 // AC-06 / FR-24 — upload an attachment to an existing ticket. Uses the
 // multipart/form-data contract of POST /api/tickets/:ticketId/attachments
-// (file + requesterId). Throws the server's safe message on failure.
+// (file only; the submitter comes from the session). Throws the server's safe
+// message on failure.
 export async function uploadAttachment(
   ticketId: number,
-  requesterId: number,
   file: File
 ): Promise<Attachment> {
   const form = new FormData();
   form.append("file", file);
-  form.append("requesterId", String(requesterId));
 
   const res = await fetch(`${API_URL}/api/tickets/${ticketId}/attachments`, {
     method: "POST",
+    credentials: "include",
     body: form,
   });
 
@@ -260,15 +291,15 @@ export async function uploadAttachment(
 }
 
 // AC-03 / BR-04 — fetch a single ticket's full detail (with attachments).
-// Enforces ownership on the server (403 for another requester's ticket).
+// Enforces ownership on the server (404 for another requester's ticket).
 // Attaches `status` and `code` to the thrown error so screens can render the
 // correct error state (403 vs 404).
 export async function fetchTicketDetail(
-  ticketId: number,
-  requesterId: number
+  ticketId: number
 ): Promise<TicketDetail> {
   const res = await fetch(
-    `${API_URL}/api/tickets/${ticketId}?requesterId=${requesterId}`
+    `${API_URL}/api/tickets/${ticketId}`,
+    { credentials: "include" }
   );
 
   const body = (await res.json().catch(() => null)) as
@@ -293,12 +324,12 @@ export async function fetchTicketDetail(
 // attachments are included when includeRemoved=true (used by Ticket Detail).
 export async function fetchAttachments(
   ticketId: number,
-  requesterId: number,
   includeRemoved = false
 ): Promise<Attachment[]> {
   const res = await fetch(
-    `${API_URL}/api/tickets/${ticketId}/attachments?requesterId=${requesterId}` +
-      (includeRemoved ? "&includeRemoved=true" : "")
+    `${API_URL}/api/tickets/${ticketId}/attachments` +
+      (includeRemoved ? "?includeRemoved=true" : ""),
+    { credentials: "include" }
   );
 
   if (!res.ok) {
@@ -311,24 +342,22 @@ export async function fetchAttachments(
 // AC-06 — downloadable URL for an active attachment. The Ticket Detail screen
 // renders this as the href of the filename download link.
 export function downloadAttachmentUrl(
-  attachmentId: number,
-  requesterId: number
+  attachmentId: number
 ): string {
-  return `${API_URL}/api/attachments/${attachmentId}/download?requesterId=${requesterId}`;
+  return `${API_URL}/api/attachments/${attachmentId}/download`;
 }
 
 // AC-07 / BR-15,16 — soft-remove an attachment. Returns the updated metadata
 // (isRemoved, removedAt, removalReason) so the UI can refresh the row in place.
 export async function removeAttachment(
   attachmentId: number,
-  requesterId: number,
   removalReason?: string
 ): Promise<Attachment> {
   const res = await fetch(`${API_URL}/api/attachments/${attachmentId}`, {
     method: "DELETE",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      requesterId,
       ...(removalReason ? { removalReason } : {}),
     }),
   });
@@ -346,4 +375,74 @@ export async function removeAttachment(
   }
 
   return (body as DataResponse<Attachment>).data;
+}
+
+// ---------------------------------------------------------------------------
+// Lab 3 — real authentication (FR-01..FR-07)
+// ---------------------------------------------------------------------------
+// Every auth request carries `credentials: "include"` so the HttpOnly session
+// cookie set by the server is sent on cross-origin (same-site) requests.
+
+async function authJson<T>(
+  path: string,
+  init: RequestInit = {}
+): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    credentials: "include",
+    ...init,
+    headers: {
+      ...(init.body ? { "Content-Type": "application/json" } : {}),
+      ...init.headers,
+    },
+  });
+
+  const body = (await res.json().catch(() => null)) as
+    | DataResponse<T>
+    | ErrorBody
+    | null;
+
+  if (!res.ok) {
+    const error = (body as ErrorBody | null)?.error;
+    throw new ApiError(
+      res.status,
+      error?.message ?? `Request failed with status ${res.status}`,
+      error?.code
+    );
+  }
+
+  return (body as DataResponse<T>).data;
+}
+
+// FR-01 — sign in with email + password. Throws ApiError (status/code) so the
+// Login screen can show the safe banner (401 invalid, 403 ACCOUNT_INACTIVE,
+// 429 rate-limited) without leaking details.
+export async function login(email: string, password: string): Promise<AuthResult> {
+  return authJson<AuthResult>("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+// FR-03 — end the server session.
+export async function logout(): Promise<void> {
+  await fetch(`${API_URL}/api/auth/logout`, {
+    method: "POST",
+    credentials: "include",
+  });
+}
+
+// FR-05 — restore the session on app boot (validates the HttpOnly cookie).
+export async function fetchMe(): Promise<AuthResult> {
+  return authJson<AuthResult>("/api/auth/me");
+}
+
+// FR-02 / AC-02 — change the initial password (server re-issues the session).
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<AuthResult> {
+  return authJson<AuthResult>("/api/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
 }

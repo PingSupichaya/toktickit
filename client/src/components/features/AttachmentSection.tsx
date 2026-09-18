@@ -34,14 +34,12 @@ function formatBytes(bytes: number): string {
 
 interface AttachmentSectionProps {
   ticketId: number;
-  requesterId: number;
   attachments: Attachment[];
   onAttachmentRemoved?: (id: number) => void;
 }
 
 export function AttachmentSection({
   ticketId,
-  requesterId,
   attachments,
   onAttachmentRemoved,
 }: AttachmentSectionProps) {
@@ -78,7 +76,6 @@ export function AttachmentSection({
     try {
       const updated = await removeAttachment(
         pendingRemove.id,
-        requesterId,
         removalReason.trim()
       );
       setRows((prev) =>
@@ -124,7 +121,7 @@ export function AttachmentSection({
     setUploading(true);
     try {
       for (const file of accepted) {
-        const uploaded = await uploadAttachment(ticketId, requesterId, file);
+        const uploaded = await uploadAttachment(ticketId, file);
         setRows((prev) => [...prev, { ...uploaded, isRemoved: false }]);
       }
     } catch (err) {
@@ -191,7 +188,7 @@ export function AttachmentSection({
                 <span className="attachment-row__meta">
                   <a
                     className="attachment-row__download"
-                    href={downloadAttachmentUrl(attachment.id, requesterId)}
+                    href={downloadAttachmentUrl(attachment.id)}
                     data-testid={`attachment-download-${attachment.id}`}
                   >
                     {attachment.originalFilename}

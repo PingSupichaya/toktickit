@@ -1,43 +1,71 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen, within } from "@testing-library/react";
 import * as api from "../../src/api.js";
 import App from "../../src/App.js";
 
 // Mock the API module so no real fetch / network is attempted in tests.
 vi.mock("../../src/api.js");
 
-const activeRequesters = [
-  { id: 1, name: "Alice Johnson", email: "alice@example.com" },
-  { id: 2, name: "Bob Smith", email: "bob@example.com" },
-];
+const alice: api.AuthUser = {
+  id: 1,
+  name: "Alice Johnson",
+  email: "alice@example.com",
+  role: "REQUESTER",
+  isActive: true,
+};
+
+const emptyPage: api.TicketPage = {
+  items: [],
+  pagination: {
+    page: 1,
+    pageSize: 10,
+    totalCount: 0,
+    totalPages: 1,
+    hasNextPage: false,
+    hasPreviousPage: false,
+  },
+};
 
 beforeEach(() => {
-  localStorage.clear();
-  vi.mocked(api.fetchRequesters).mockResolvedValue(activeRequesters);
+  vi.clearAllMocks();
+  vi.mocked(api.fetchMe).mockRejectedValue(
+    Object.assign(new Error("Unauthorized"), { status: 401 }) as never
+  );
+  vi.mocked(api.fetchTickets).mockResolvedValue(emptyPage);
+  vi.mocked(api.fetchCategories).mockResolvedValue([]);
+  vi.mocked(api.fetchRelatedSystems).mockResolvedValue([]);
 });
 
 describe("App", () => {
-  it("renders the TokTickIT selector heading before a requester is chosen", async () => {
+  it("renders the Login screen when there is no valid session", async () => {
     render(<App />);
-    expect(await screen.findByText(/TokTickIT/i)).toBeInTheDocument();
+    expect(await screen.findByTestId("login-email")).toBeInTheDocument();
+    expect(screen.queryByTestId("logout-btn")).not.toBeInTheDocument();
   });
 
-  it("shows the requester selector with active requesters on load", async () => {
-    const user = userEvent.setup();
+  it("restores an authenticated Requester session and renders the My Tickets shell", async () => {
+    vi.mocked(api.fetchMe).mockResolvedValue({
+      user: alice,
+      mustChangePassword: false,
+    });
     render(<App />);
-    const trigger = await screen.findByTestId("requester-select");
-    expect(trigger).toBeInTheDocument();
-    // Open the dropdown to reveal the active requester options.
-    await user.click(trigger);
-    expect(screen.getByText("Alice Johnson (alice@example.com)")).toBeInTheDocument();
-    expect(screen.getByText("Bob Smith (bob@example.com)")).toBeInTheDocument();
+
+    await screen.findByTestId("logout-btn");
+    expect(screen.getByText("Alice Johnson")).toBeInTheDocument();
+    const nav = screen.getByRole("navigation", { name: "Main navigation" });
+    expect(within(nav).getByText("My Tickets")).toBeInTheDocument();
+    expect(within(nav).getByText("Create Ticket")).toBeInTheDocument();
   });
 
-  it("shows an error and retry option when fetching requesters fails", async () => {
-    vi.mocked(api.fetchRequesters).mockRejectedValueOnce(new Error("network down"));
+  it("shows only the Change Password screen when the session requires a password change", async () => {
+    vi.mocked(api.fetchMe).mockResolvedValue({
+      user: alice,
+      mustChangePassword: true,
+    });
     render(<App />);
-    expect(await screen.findByText(/Failed to load requesters/i)).toBeInTheDocument();
-    expect(screen.getByText(/Retry/i)).toBeInTheDocument();
+
+    expect(await screen.findByTestId("current-password")).toBeInTheDocument();
+    expect(screen.queryByTestId("logout-btn")).not.toBeInTheDocument();
+    expect(screen.queryByText("Create Ticket")).not.toBeInTheDocument();
   });
 });

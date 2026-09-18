@@ -6,6 +6,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
   busy?: boolean;
   block?: boolean;
+  busyLabel?: string;
   children: ReactNode;
 }
 
@@ -13,6 +14,7 @@ export function Button({
   variant = "primary",
   busy = false,
   block = false,
+  busyLabel,
   className = "",
   children,
   type = "button",
@@ -29,17 +31,19 @@ export function Button({
     .filter(Boolean)
     .join(" ");
 
+  const busyText = busyLabel ?? "Submitting…";
+
   return (
     <button
       type={type}
       className={classes}
       disabled={disabled || busy}
       aria-busy={busy || undefined}
-      aria-label={busy ? `${typeof children === "string" ? children : "Submitting"} …loading` : undefined}
+      aria-label={busy ? `${busyText} …loading` : undefined}
       {...rest}
     >
       {busy && <span className="spinner" aria-hidden="true" />}
-      {busy ? "Submitting…" : children}
+      {busy ? busyText : children}
     </button>
   );
 }

@@ -10,13 +10,19 @@ import {
   deleteStoredFile,
   sanitizeOriginalFilename,
 } from "../../src/attachmentFiles.js";
+import {
+  TRUSTED_ORIGIN,
+  createTestUser,
+  deleteTestUsers,
+  loginAgent,
+} from "../helpers/testAuth.js";
 
 // Attachment API endpoints (AC-06 - type/size/limits; AC-07 - soft removal):
 //   T-017 – upload: valid file 201; invalid type 415; oversized 413;
-//           5-attachment limit 409; wrong owner 403
-//   T-019 – download: owned active 200; wrong owner 403; removed 403
+//           5-attachment limit 409; wrong owner 404 (D-03)
+//   T-019 – download: owned active 200; wrong owner 404 (D-03); removed 403
 //   T-020 – soft-remove: 200 isRemoved=true; metadata visible via
-//           includeRemoved=true; re-remove 409; wrong owner 403
+//           includeRemoved=true; re-remove 409; wrong owner 404 (D-03)
 //   T-018 – unit tests for filename sanitisation (path traversal, UUID names)
 // Requires the DB to be migrated and seeded (see README.md). Files written to
 // server/uploads and all DB rows created here are cleaned up in afterAll.
@@ -25,11 +31,14 @@ import {
 
 const prisma = getPrisma();
 
+const EMAIL = {
+  submitter: "lab02.attach.submitter@mail.kmutt.ac.th",
+  foreigner: "lab02.attach.foreigner@mail.kmutt.ac.th",
+};
+
 const createdTicketIds: number[] = [];
 const createdAttachmentIds: number[] = [];
 
-let requesterId = 0;
-let otherRequesterId = 0;
 let categoryId = 0;
 let relatedSystemId = 0;
 
@@ -37,9 +46,8 @@ function pngBytes(): Buffer {
   return Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]);
 }
 
-function validPayload(rId: number): Record<string, unknown> {
+function validPayload(): Record<string, unknown> {
   return {
-    requesterId: rId,
     categoryId,
     relatedSystemId,
     summary: "Attachment test ticket for evidence uploads",
@@ -49,23 +57,26 @@ function validPayload(rId: number): Record<string, unknown> {
   };
 }
 
-async function createTicket(rId: number): Promise<number> {
-  const res = await request(app).post("/api/tickets").send(validPayload(rId));
+async function createTicket(agent: request.Agent): Promise<number> {
+  const res = await agent
+    .post("/api/tickets")
+    .set("Origin", TRUSTED_ORIGIN)
+    .send(validPayload());
   expect(res.status).toBe(201);
   createdTicketIds.push(res.body.data.id);
   return res.body.data.id;
 }
 
 async function uploadFile(
+  agent: request.Agent,
   ticketId: number,
-  rId: number,
   buffer: Buffer,
   filename: string,
   contentType: string
 ) {
-  const res = await request(app)
+  const res = await agent
     .post(`/api/tickets/${ticketId}/attachments`)
-    .field("requesterId", String(rId))
+    .set("Origin", TRUSTED_ORIGIN)
     .attach("file", buffer, { filename, contentType });
   if (res.body?.data?.id) createdAttachmentIds.push(res.body.data.id);
   return res;
@@ -76,16 +87,8 @@ let ownerTicketId = 0;
 beforeAll(async () => {
   await prisma.$connect();
 
-  const requesters = await prisma.requester.findMany({
-    where: { isActive: true },
-    orderBy: { id: "asc" },
-    take: 2,
-  });
-  if (requesters.length < 2) {
-    throw new Error("Seed must provide at least 2 active requesters");
-  }
-  requesterId = requesters[0].id;
-  otherRequesterId = requesters[1].id;
+  await createTestUser(prisma, EMAIL.submitter, "REQUESTER");
+  await createTestUser(prisma, EMAIL.foreigner, "REQUESTER");
 
   const category = await prisma.category.findFirstOrThrow({
     where: { isActive: true },
@@ -99,7 +102,8 @@ beforeAll(async () => {
   });
   relatedSystemId = relatedSystem.id;
 
-  ownerTicketId = await createTicket(requesterId);
+  const submitterAgent = await loginAgent(app, EMAIL.submitter);
+  ownerTicketId = await createTicket(submitterAgent);
 });
 
 afterAll(async () => {
@@ -120,13 +124,15 @@ afterAll(async () => {
       where: { id: { in: createdTicketIds } },
     });
   }
+  await deleteTestUsers(prisma, Object.values(EMAIL));
   await prisma.$disconnect();
 });
 
 describe("POST /api/tickets/:ticketId/attachments (T-017)", () => {
   it("accepts a valid JPEG and returns 201 with metadata", async () => {
-    const ticketId = await createTicket(requesterId);
-    const res = await uploadFile(ticketId, requesterId, pngBytes(), "screenshot.jpg", "image/jpeg");
+    const agent = await loginAgent(app, EMAIL.submitter);
+    const ticketId = await createTicket(agent);
+    const res = await uploadFile(agent, ticketId, pngBytes(), "screenshot.jpg", "image/jpeg");
     expect(res.status).toBe(201);
 
     const d = res.body.data;
@@ -140,53 +146,51 @@ describe("POST /api/tickets/:ticketId/attachments (T-017)", () => {
   });
 
   it("rejects an unsupported file type with 415", async () => {
-    const res = await uploadFile(ownerTicketId, requesterId, Buffer.from("plain text"), "notes.txt", "text/plain");
+    const agent = await loginAgent(app, EMAIL.submitter);
+    const res = await uploadFile(agent, ownerTicketId, Buffer.from("plain text"), "notes.txt", "text/plain");
     expect(res.status).toBe(415);
     expect(res.body.error.code).toBe("INVALID_FILE_TYPE");
   });
 
   it("rejects an oversized file (>5 MB) with 413", async () => {
+    const agent = await loginAgent(app, EMAIL.submitter);
     const big = Buffer.alloc(5 * 1024 * 1024 + 1024, 1);
-    const res = await uploadFile(ownerTicketId, requesterId, big, "big.pdf", "application/pdf");
+    const res = await uploadFile(agent, ownerTicketId, big, "big.pdf", "application/pdf");
     expect(res.status).toBe(413);
     expect(res.body.error.code).toBe("FILE_TOO_LARGE");
   });
 
   it("returns 400 when no file is provided", async () => {
-    const res = await request(app)
+    const agent = await loginAgent(app, EMAIL.submitter);
+    const res = await agent
       .post(`/api/tickets/${ownerTicketId}/attachments`)
-      .field("requesterId", String(requesterId));
+      .set("Origin", TRUSTED_ORIGIN);
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe("MISSING_FILE");
   });
 
-  it("returns 400 when requesterId is missing but a file is provided", async () => {
-    const res = await request(app)
-      .post(`/api/tickets/${ownerTicketId}/attachments`)
-      .attach("file", pngBytes(), { filename: "orphan.png", contentType: "image/png" });
-    expect(res.status).toBe(400);
-    expect(res.body.error.code).toBe("MISSING_REQUESTER_ID");
-  });
-
   it("blocks a 6th active attachment with 409", async () => {
-    const ticketId = await createTicket(requesterId);
+    const agent = await loginAgent(app, EMAIL.submitter);
+    const ticketId = await createTicket(agent);
     for (let i = 1; i <= 5; i++) {
-      const r = await uploadFile(ticketId, requesterId, pngBytes(), `batch-${i}.png`, "image/png");
+      const r = await uploadFile(agent, ticketId, pngBytes(), `batch-${i}.png`, "image/png");
       expect(r.status).toBe(201);
     }
-    const sixth = await uploadFile(ticketId, requesterId, pngBytes(), "extra.png", "image/png");
+    const sixth = await uploadFile(agent, ticketId, pngBytes(), "extra.png", "image/png");
     expect(sixth.status).toBe(409);
     expect(sixth.body.error.code).toBe("MAX_ATTACHMENTS_REACHED");
   });
 
-  it("returns 403 for a requester who does not own the ticket", async () => {
-    const res = await uploadFile(ownerTicketId, otherRequesterId, pngBytes(), "crack.png", "image/png");
-    expect(res.status).toBe(403);
-    expect(res.body.error.code).toBe("FORBIDDEN");
+  it("returns 404 for a requester who does not own the ticket (D-03)", async () => {
+    const foreignAgent = await loginAgent(app, EMAIL.foreigner);
+    const res = await uploadFile(foreignAgent, ownerTicketId, pngBytes(), "crack.png", "image/png");
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe("TICKET_NOT_FOUND");
   });
 
   it("returns 404 for a non-existent ticket", async () => {
-    const res = await uploadFile(2147483647, requesterId, pngBytes(), "ghost.png", "image/png");
+    const agent = await loginAgent(app, EMAIL.submitter);
+    const res = await uploadFile(agent, 2147483647, pngBytes(), "ghost.png", "image/png");
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe("TICKET_NOT_FOUND");
   });
@@ -194,25 +198,28 @@ describe("POST /api/tickets/:ticketId/attachments (T-017)", () => {
 
 describe("GET /api/tickets/:ticketId/attachments (metadata)", () => {
   it("lists only active attachments by default, ordered by id", async () => {
-    const ticketId = await createTicket(requesterId);
-    const a = await uploadFile(ticketId, requesterId, pngBytes(), "meta-a.png", "image/png");
-    const b = await uploadFile(ticketId, requesterId, pngBytes(), "meta-b.png", "image/png");
+    const agent = await loginAgent(app, EMAIL.submitter);
+    const ticketId = await createTicket(agent);
+    const a = await uploadFile(agent, ticketId, pngBytes(), "meta-a.png", "image/png");
+    const b = await uploadFile(agent, ticketId, pngBytes(), "meta-b.png", "image/png");
 
-    const res = await request(app).get(`/api/tickets/${ticketId}/attachments?requesterId=${requesterId}`);
+    const res = await agent.get(`/api/tickets/${ticketId}/attachments`);
     expect(res.status).toBe(200);
     const order = res.body.data.map((x: { id: number }) => x.id);
     expect(order).toEqual([a.body.data.id, b.body.data.id]);
     expect(res.body.data.every((x: { isRemoved: boolean }) => x.isRemoved === false)).toBe(true);
   });
 
-  it("returns 403 for a requester who does not own the ticket", async () => {
-    const res = await request(app).get(`/api/tickets/${ownerTicketId}/attachments?requesterId=${otherRequesterId}`);
-    expect(res.status).toBe(403);
-    expect(res.body.error.code).toBe("FORBIDDEN");
+  it("returns 404 for a requester who does not own the ticket (D-03)", async () => {
+    const foreignAgent = await loginAgent(app, EMAIL.foreigner);
+    const res = await foreignAgent.get(`/api/tickets/${ownerTicketId}/attachments`);
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe("TICKET_NOT_FOUND");
   });
 
   it("returns 404 for a non-existent ticket", async () => {
-    const res = await request(app).get(`/api/tickets/2147483647/attachments?requesterId=${requesterId}`);
+    const agent = await loginAgent(app, EMAIL.submitter);
+    const res = await agent.get("/api/tickets/2147483647/attachments");
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe("TICKET_NOT_FOUND");
   });
@@ -220,9 +227,10 @@ describe("GET /api/tickets/:ticketId/attachments (metadata)", () => {
 
 describe("GET /api/attachments/:attachmentId/download (T-019)", () => {
   it("downloads an owned active attachment as binary", async () => {
-    const ticketId = await createTicket(requesterId);
-    const up = await uploadFile(ticketId, requesterId, pngBytes(), "evidence.png", "image/png");
-    const res = await request(app).get(`/api/attachments/${up.body.data.id}/download?requesterId=${requesterId}`);
+    const agent = await loginAgent(app, EMAIL.submitter);
+    const ticketId = await createTicket(agent);
+    const up = await uploadFile(agent, ticketId, pngBytes(), "evidence.png", "image/png");
+    const res = await agent.get(`/api/attachments/${up.body.data.id}/download`);
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toMatch(/^image\/png/);
     expect(res.headers["content-disposition"] as string).toContain('attachment; filename="evidence.png"');
@@ -230,26 +238,30 @@ describe("GET /api/attachments/:attachmentId/download (T-019)", () => {
     expect(res.body.length).toBe(pngBytes().length);
   });
 
-  it("returns 403 for a non-owner requester", async () => {
-    const ticketId = await createTicket(requesterId);
-    const up = await uploadFile(ticketId, requesterId, pngBytes(), "secret.png", "image/png");
-    const res = await request(app).get(`/api/attachments/${up.body.data.id}/download?requesterId=${otherRequesterId}`);
-    expect(res.status).toBe(403);
-    expect(res.body.error.code).toBe("FORBIDDEN");
+  it("returns 404 for a non-owner requester (D-03)", async () => {
+    const agent = await loginAgent(app, EMAIL.submitter);
+    const foreignAgent = await loginAgent(app, EMAIL.foreigner);
+    const ticketId = await createTicket(agent);
+    const up = await uploadFile(agent, ticketId, pngBytes(), "secret.png", "image/png");
+    const res = await foreignAgent.get(`/api/attachments/${up.body.data.id}/download`);
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe("ATTACHMENT_NOT_FOUND");
   });
 
   it("returns 403 for a removed attachment", async () => {
-    const ticketId = await createTicket(requesterId);
-    const up = await uploadFile(ticketId, requesterId, pngBytes(), "gone.png", "image/png");
+    const agent = await loginAgent(app, EMAIL.submitter);
+    const ticketId = await createTicket(agent);
+    const up = await uploadFile(agent, ticketId, pngBytes(), "gone.png", "image/png");
     const id = up.body.data.id;
-    await request(app).delete(`/api/attachments/${id}`).send({ requesterId });
-    const res = await request(app).get(`/api/attachments/${id}/download?requesterId=${requesterId}`);
+    await agent.delete(`/api/attachments/${id}`).set("Origin", TRUSTED_ORIGIN);
+    const res = await agent.get(`/api/attachments/${id}/download`);
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe("ATTACHMENT_REMOVED");
   });
 
   it("returns 404 for a non-existent attachment", async () => {
-    const res = await request(app).get(`/api/attachments/2147483647/download?requesterId=${requesterId}`);
+    const agent = await loginAgent(app, EMAIL.submitter);
+    const res = await agent.get("/api/attachments/2147483647/download");
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe("ATTACHMENT_NOT_FOUND");
   });
@@ -257,27 +269,27 @@ describe("GET /api/attachments/:attachmentId/download (T-019)", () => {
 
 describe("DELETE /api/attachments/:attachmentId (T-020)", () => {
   it("soft-removes an owned attachment and keeps metadata visible", async () => {
-    const ticketId = await createTicket(requesterId);
-    const up = await uploadFile(ticketId, requesterId, pngBytes(), "old-screenshot.png", "image/png");
+    const agent = await loginAgent(app, EMAIL.submitter);
+    const ticketId = await createTicket(agent);
+    const up = await uploadFile(agent, ticketId, pngBytes(), "old-screenshot.png", "image/png");
     const id = up.body.data.id;
 
-    const del = await request(app)
+    const del = await agent
       .delete(`/api/attachments/${id}`)
-      .send({ requesterId, removalReason: "Uploaded wrong file" });
+      .set("Origin", TRUSTED_ORIGIN)
+      .send({ removalReason: "Uploaded wrong file" });
     expect(del.status).toBe(200);
     expect(del.body.data.id).toBe(id);
     expect(del.body.data.isRemoved).toBe(true);
     expect(del.body.data.removedAt).toBeDefined();
     expect(del.body.data.removalReason).toBe("Uploaded wrong file");
 
-    const withoutRemoved = await request(app).get(
-      `/api/tickets/${ticketId}/attachments?requesterId=${requesterId}`
-    );
+    const withoutRemoved = await agent.get(`/api/tickets/${ticketId}/attachments`);
     expect(withoutRemoved.status).toBe(200);
     expect(withoutRemoved.body.data.map((a: { id: number }) => a.id)).not.toContain(id);
 
-    const withRemoved = await request(app).get(
-      `/api/tickets/${ticketId}/attachments?requesterId=${requesterId}&includeRemoved=true`
+    const withRemoved = await agent.get(
+      `/api/tickets/${ticketId}/attachments?includeRemoved=true`
     );
     const rec = withRemoved.body.data.find((a: { id: number }) => a.id === id);
     expect(rec).toBeDefined();
@@ -288,29 +300,35 @@ describe("DELETE /api/attachments/:attachmentId (T-020)", () => {
   });
 
   it("returns 409 when the attachment is already removed", async () => {
-    const ticketId = await createTicket(requesterId);
-    const up = await uploadFile(ticketId, requesterId, pngBytes(), "twice.png", "image/png");
+    const agent = await loginAgent(app, EMAIL.submitter);
+    const ticketId = await createTicket(agent);
+    const up = await uploadFile(agent, ticketId, pngBytes(), "twice.png", "image/png");
     const id = up.body.data.id;
-    await request(app).delete(`/api/attachments/${id}`).send({ requesterId });
-    const again = await request(app).delete(`/api/attachments/${id}`).send({ requesterId });
+    await agent.delete(`/api/attachments/${id}`).set("Origin", TRUSTED_ORIGIN);
+    const again = await agent
+      .delete(`/api/attachments/${id}`)
+      .set("Origin", TRUSTED_ORIGIN);
     expect(again.status).toBe(409);
     expect(again.body.error.code).toBe("ALREADY_REMOVED");
   });
 
-  it("returns 403 for a non-owner requester", async () => {
-    const ticketId = await createTicket(requesterId);
-    const up = await uploadFile(ticketId, requesterId, pngBytes(), "foreign.png", "image/png");
-    const res = await request(app)
+  it("returns 404 for a non-owner requester (D-03)", async () => {
+    const agent = await loginAgent(app, EMAIL.submitter);
+    const foreignAgent = await loginAgent(app, EMAIL.foreigner);
+    const ticketId = await createTicket(agent);
+    const up = await uploadFile(agent, ticketId, pngBytes(), "foreign.png", "image/png");
+    const res = await foreignAgent
       .delete(`/api/attachments/${up.body.data.id}`)
-      .send({ requesterId: otherRequesterId });
-    expect(res.status).toBe(403);
-    expect(res.body.error.code).toBe("FORBIDDEN");
+      .set("Origin", TRUSTED_ORIGIN);
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe("ATTACHMENT_NOT_FOUND");
   });
 
   it("returns 404 for a non-existent attachment", async () => {
-    const res = await request(app)
+    const agent = await loginAgent(app, EMAIL.submitter);
+    const res = await agent
       .delete("/api/attachments/2147483647")
-      .send({ requesterId });
+      .set("Origin", TRUSTED_ORIGIN);
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe("ATTACHMENT_NOT_FOUND");
   });

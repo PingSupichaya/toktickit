@@ -89,7 +89,7 @@ export function TicketDetail({ ticketId, onBack }: TicketDetailProps) {
     setErrorStatus(null);
     setTicket(null);
 
-    fetchTicketDetail(ticketId, requester.id)
+    fetchTicketDetail(ticketId)
       .then((data) => {
         if (cancelled) return;
         setTicket(data);
@@ -118,18 +118,6 @@ export function TicketDetail({ ticketId, onBack }: TicketDetailProps) {
   );
 
   if (loading) return <DetailSkeleton />;
-
-  if (errorStatus === 403) {
-    return (
-      <div className="ticket-detail">
-        <ErrorState
-          title="You do not have permission to view this ticket."
-          message="This ticket belongs to another requester."
-          action={backButton}
-        />
-      </div>
-    );
-  }
 
   if (errorStatus === 404) {
     return (
@@ -177,7 +165,7 @@ export function TicketDetail({ ticketId, onBack }: TicketDetailProps) {
             value={formatTicketDate(ticket.ticketDate)}
             testId="ticket-date"
           />
-          <ReadOnlyField label="Requester" value={ticket.requester.name} />
+          <ReadOnlyField label="Requester" value={ticket.submitter.name} />
           <ReadOnlyField label="Category" value={ticket.category.name} />
           <ReadOnlyField label="Related System" value={ticket.relatedSystem.name} />
           <div className="field field--readonly">
@@ -203,7 +191,6 @@ export function TicketDetail({ ticketId, onBack }: TicketDetailProps) {
       <Card className="ticket-detail__card">
         <AttachmentSection
           ticketId={ticket.id}
-          requesterId={requester?.id ?? ticket.requesterId}
           attachments={ticket.attachments}
         />
       </Card>
