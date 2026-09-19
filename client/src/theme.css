@@ -2471,3 +2471,249 @@ input[type="password"]::-ms-clear {
 .queue__pagination {
   margin-top: var(--space-6);
 }
+
+/* ---------------------------------------------------------------------------
+   Lab 3 — IT Staff Ticket Detail (ui-spec 6.3)
+   --------------------------------------------------------------------------- */
+.staff-detail {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+.staff-detail__ops-groups {
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
+}
+
+.staff-detail__ops-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-primary);
+  margin: 0 0 var(--space-4);
+}
+
+.staff-detail__ops {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4) var(--space-6);
+}
+
+/* Editable operational fields: white background + #C0C8C4 border so they read
+   as the write surface opposite the #F9F9F7 read-only grid (ui-spec 6.3). */
+.field--editable {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  background-color: #fff;
+  border: 1px solid #c0c8c4;
+  border-radius: var(--radius-control);
+  padding: var(--space-2) var(--space-3);
+}
+
+.field--editable .field__label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 22px;
+}
+
+.field--editable .select-control {
+  border: none;
+  background: transparent;
+}
+
+.field--status .badge {
+  font-size: 0.6875rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.staff-detail__owner-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 38px;
+}
+
+.staff-detail__actions-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.staff-detail__actions-row .btn {
+  margin-left: auto;
+}
+
+/* Tabs (ARIA tablist pattern; fade-in 200ms ease) */
+.detail-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.detail-tabs__bar {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 2px solid var(--color-border);
+  overflow-x: auto;
+}
+
+.detail-tabs__tab {
+  appearance: none;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  padding: var(--space-3) var(--space-4);
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.detail-tabs__tab:hover {
+  color: var(--color-primary-hover);
+}
+
+.detail-tabs__tab[aria-selected="true"] {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+.detail-tabs__panel[hidden] {
+  display: none;
+}
+
+.detail-tabs__panel {
+  animation: tabs-fade-in 200ms ease;
+}
+
+@keyframes tabs-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.detail-tabs__hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  background-color: var(--color-bg-readonly);
+  border-radius: 999px;
+  padding: var(--space-1) var(--space-3);
+}
+
+/* Amber "internal only" notice (warning tokens #FEF3C7 / #92400E) */
+.note-hint {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid #f3e0b7;
+  border-radius: var(--radius-control);
+  background-color: #fef3c7;
+  color: #92400e;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+/* Shared thread list used by Public Comments and Internal Notes */
+.thread-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.thread-item {
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border-lighter);
+  animation: thread-item-in 200ms ease;
+}
+
+.thread-list--notes .thread-item {
+  background-color: #fdfaf2;
+  border-left: 3px solid #f3e0b7;
+  padding-left: var(--space-3);
+}
+
+@keyframes thread-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.thread-item__meta {
+  display: block;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.thread-item__author {
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-right: var(--space-1);
+}
+
+.thread-item__marker {
+  display: inline-flex;
+  margin: 0 var(--space-2);
+  padding: 0 var(--space-2);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 3px;
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.thread-item__content {
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+  margin: var(--space-1) 0 0;
+}
+
+.thread-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+@media (max-width: 767px) {
+  .staff-detail__ops {
+    grid-template-columns: 1fr;
+  }
+
+  .staff-detail__actions-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .staff-detail__actions-row .btn {
+    margin-left: 0;
+    width: 100%;
+  }
+}

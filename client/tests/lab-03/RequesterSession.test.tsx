@@ -131,7 +131,10 @@ describe("Requester regression under the authenticated session (UI-10 - AC-20)",
       );
     });
 
-    await user.click(screen.getByRole("button", { name: "Open ticket TKT-000001" }));
+    const openIt = screen.getByRole("button", { name: "Open ticket TKT-000001" });
+    await waitFor(() => expect(openIt).toBeEnabled());
+
+    await user.click(openIt);
 
     await waitFor(() => {
       expect(screen.getByTestId("ticket-detail-number")).toBeInTheDocument();

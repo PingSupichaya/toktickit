@@ -26,6 +26,12 @@ import {
 } from "./middleware/authMiddleware.js";
 import { BCRYPT_COST, passwordRuleViolations } from "./passwordRules.js";
 import { getTrustedOrigins } from "./csrf.js";
+import {
+  canTransition,
+  getPermittedTransitions,
+  isStaffRole,
+} from "./statusTransitions.js";
+import { validateContent } from "./contentValidation.js";
 import { normalizeEmail } from "./email.js";
 import {
   SESSION_COOKIE_NAME,
@@ -60,6 +66,31 @@ const PAGE_SIZES = [10, 25, 50];
 class AlreadyIndicatedResolvedError extends Error {
   constructor() {
     super("indicate-resolved already recorded");
+  }
+}
+
+// Raised inside the claim transaction when the Ticket already has an owner;
+// mapped to 409 TICKET_ALREADY_ASSIGNED (BR-43 stale-write protection).
+class TicketAlreadyAssignedError extends Error {
+  constructor() {
+    super("ticket is already assigned");
+  }
+}
+
+// Raised inside the PATCH transaction when the requested status move is not
+// permitted by the current-status matrix; mapped to 409
+// TICKET_STATUS_TRANSITION_NOT_ALLOWED (BR-43).
+class StatusTransitionNotAllowedError extends Error {
+  constructor() {
+    super("status transition is not allowed");
+  }
+}
+
+// Raised inside the claim transaction when the Ticket does not exist; mapped
+// to 404 TICKET_NOT_FOUND.
+class TicketNotFoundInTransactionError extends Error {
+  constructor() {
+    super("ticket not found");
   }
 }
 
@@ -896,6 +927,51 @@ app.get(
 });
 
 // ---------------------------------------------------------------------------
+// Eligible owners (supplementary helper for the IT Staff Owner select; the
+// documented API defines only PUT /owner, so this endpoint supplies the
+// candidate list for the ui-spec §6.3 `owner-select`). Active IT_STAFF/ADMIN
+// users only; a Requester request is forbidden (403) and no user data leaks.
+// Registered BEFORE /api/tickets/:ticketId so the literal segment wins.
+// ---------------------------------------------------------------------------
+app.get("/api/tickets/eligible-owners", async (req: Request, res: Response) => {
+  try {
+    const user = req.sessionUser;
+    if (!user) {
+      return res.status(401).json({
+        error: { message: "Authentication required", code: "UNAUTHORIZED" },
+      });
+    }
+    if (!isStaffRole(user.role)) {
+      return res.status(403).json({
+        error: {
+          message: "You are not authorized to view eligible owners",
+          code: "FORBIDDEN",
+        },
+      });
+    }
+
+    const owners = await getPrisma().user.findMany({
+      where: {
+        isActive: true,
+        role: { in: [UserRole.IT_STAFF, UserRole.ADMIN] },
+      },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, role: true },
+    });
+
+    res.status(200).json({ data: owners });
+  } catch (err) {
+    console.error("Failed to fetch eligible owners:", err);
+    res.status(500).json({
+      error: {
+        message: "Failed to fetch eligible owners",
+        code: "INTERNAL_SERVER_ERROR",
+      },
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Ticket Detail (AC-03 / BR-04)
 // GET /api/tickets/:ticketId -> 200 { data: ticket }
 // Enforces ownership: a Requester may only view their own tickets; cross-owner
@@ -919,33 +995,7 @@ app.get("/api/tickets/:ticketId", async (req: Request, res: Response) => {
 
     const ticket = await getPrisma().ticket.findUnique({
       where: { id: ticketId },
-      include: {
-        submitter: { select: { id: true, name: true, email: true } },
-        owner: { select: { id: true, name: true, role: true } },
-        category: { select: { id: true, name: true } },
-        relatedSystem: { select: { id: true, name: true } },
-        attachments: {
-          orderBy: { id: "asc" },
-          select: {
-            id: true,
-            originalFilename: true,
-            fileSizeBytes: true,
-            contentType: true,
-            uploadedAt: true,
-            isRemoved: true,
-            removedAt: true,
-            removalReason: true,
-          },
-        },
-        publicComments: {
-          orderBy: { createdAt: "asc" },
-          include: { author: { select: { id: true, name: true } } },
-        },
-        internalNotes: {
-          orderBy: { createdAt: "asc" },
-          include: { author: { select: { id: true, name: true } } },
-        },
-      },
+      include: TICKET_DETAIL_INCLUDE,
     });
 
     if (!ticket) {
@@ -960,31 +1010,449 @@ app.get("/api/tickets/:ticketId", async (req: Request, res: Response) => {
       });
     }
 
-    const isStaff =
-      user.role === UserRole.IT_STAFF || user.role === UserRole.ADMIN;
-
-    const data: Record<string, unknown> = {
-      ...ticket,
-      canIndicateResolved:
-        user.role === UserRole.REQUESTER &&
-        ticket.submittedById === user.id &&
-        ticket.indicatedResolvedAt === null &&
-        INDICATABLE_STATUSES.includes(ticket.currentStatus),
-      comments: ticket.publicComments.map(toCommentShape),
-    };
-    delete data.publicComments;
-    delete data.indicatedResolvedAt;
-    if (isStaff) {
-      data.notes = ticket.internalNotes.map(toCommentShape);
-    }
-    delete data.internalNotes;
-
-    res.status(200).json({ data });
+    res.status(200).json({ data: toTicketDetail(ticket, user) });
   } catch (err) {
     console.error("Failed to fetch ticket:", err);
     res.status(500).json({
       error: {
         message: "Failed to fetch ticket",
+        code: "INTERNAL_SERVER_ERROR",
+      },
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Ticket operational update (FR-17 / FR-18 / AC-11, AC-12, BR-19, BR-20)
+// PATCH /api/tickets/:ticketId -> 200 { data: updated ticket }
+//   body: { itPriority?: LOW|MEDIUM|HIGH, currentStatus?: transition target }
+//   Only IT_STAFF/ADMIN. Status changes are validated against the CURRENT
+//   status read in the same transaction (BR-43); a disallowed move is 409
+//   TICKET_STATUS_TRANSITION_NOT_ALLOWED. Response mirrors §4.9 minus
+//   comments/notes for compactness.
+// ---------------------------------------------------------------------------
+app.patch("/api/tickets/:ticketId", async (req: Request, res: Response) => {
+  try {
+    const user = req.sessionUser;
+    if (!user) {
+      return res.status(401).json({
+        error: { message: "Authentication required", code: "UNAUTHORIZED" },
+      });
+    }
+    if (!isStaffRole(user.role)) {
+      return res.status(403).json({
+        error: {
+          message: "Only IT Staff or Administrator may update a Ticket",
+          code: "FORBIDDEN",
+        },
+      });
+    }
+
+    const ticketId = Number(req.params.ticketId);
+    if (!Number.isInteger(ticketId) || ticketId <= 0) {
+      return res.status(404).json({
+        error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
+      });
+    }
+
+    const body = req.body ?? {};
+    const details: Record<string, string> = {};
+    let itPriority: RequestedPriority | undefined;
+    if (body.itPriority !== undefined && body.itPriority !== null) {
+      if (PRIORITIES.includes(body.itPriority as RequestedPriority)) {
+        itPriority = body.itPriority as RequestedPriority;
+      } else {
+        details.itPriority = 'IT Priority must be "LOW", "MEDIUM", or "HIGH"';
+      }
+    }
+    let nextStatus: TicketStatus | undefined;
+    if (body.currentStatus !== undefined && body.currentStatus !== null) {
+      if (STATUSES.includes(body.currentStatus as TicketStatus)) {
+        nextStatus = body.currentStatus as TicketStatus;
+      } else {
+        details.currentStatus = "Status has an invalid value";
+      }
+    }
+
+    if (itPriority === undefined && nextStatus === undefined) {
+      return res.status(400).json({
+        error: {
+          message: "Validation failed",
+          code: "VALIDATION_ERROR",
+          details: {
+            body: "At least one of itPriority or currentStatus must be provided",
+          },
+        },
+      });
+    }
+    if (Object.keys(details).length > 0) {
+      return res.status(400).json({
+        error: {
+          message: "Validation failed",
+          code: "VALIDATION_ERROR",
+          details,
+        },
+      });
+    }
+
+    const db = getPrisma();
+    try {
+      await db.$transaction(async (tx) => {
+        const current = await tx.ticket.findUniqueOrThrow({
+          where: { id: ticketId },
+          select: { currentStatus: true },
+        });
+        if (
+          nextStatus !== undefined &&
+          !canTransition(current.currentStatus, nextStatus, user.role)
+        ) {
+          throw new StatusTransitionNotAllowedError();
+        }
+        await tx.ticket.update({
+          where: { id: ticketId },
+          data: {
+            ...(itPriority !== undefined ? { itPriority } : {}),
+            ...(nextStatus !== undefined ? { currentStatus: nextStatus } : {}),
+          },
+        });
+      });
+    } catch (err) {
+      if (err instanceof StatusTransitionNotAllowedError) {
+        return res.status(409).json({
+          error: {
+            message: "This status transition is not allowed",
+            code: "TICKET_STATUS_TRANSITION_NOT_ALLOWED",
+          },
+        });
+      }
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2025"
+      ) {
+        return res.status(404).json({
+          error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
+        });
+      }
+      throw err;
+    }
+
+    const updated = await db.ticket.findUnique({
+      where: { id: ticketId },
+      include: TICKET_DETAIL_INCLUDE,
+    });
+    if (!updated) {
+      return res.status(404).json({
+        error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
+      });
+    }
+    const data = toTicketDetail(updated, user);
+    delete data.comments;
+    delete data.notes;
+    res.status(200).json({ data });
+  } catch (err) {
+    console.error("Failed to update ticket:", err);
+    res.status(500).json({
+      error: {
+        message: "Failed to update ticket",
+        code: "INTERNAL_SERVER_ERROR",
+      },
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Claim an unassigned Ticket (FR-16 / AC-09 / BR-18)
+// POST /api/tickets/:ticketId/claim -> 200 { data: { ticketId, owner } }
+//   Only IT_STAFF/ADMIN. Already-assigned Tickets are rejected 409
+//   TICKET_ALREADY_ASSIGNED (use the assign endpoint instead); the owner
+//   snapshot is re-read in the same transaction (BR-43).
+// ---------------------------------------------------------------------------
+app.post("/api/tickets/:ticketId/claim", async (req: Request, res: Response) => {
+  try {
+    const user = req.sessionUser;
+    if (!user) {
+      return res.status(401).json({
+        error: { message: "Authentication required", code: "UNAUTHORIZED" },
+      });
+    }
+    if (!isStaffRole(user.role)) {
+      return res.status(403).json({
+        error: {
+          message: "Only IT Staff or Administrator may claim a Ticket",
+          code: "FORBIDDEN",
+        },
+      });
+    }
+
+    const ticketId = Number(req.params.ticketId);
+    if (!Number.isInteger(ticketId) || ticketId <= 0) {
+      return res.status(404).json({
+        error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
+      });
+    }
+
+    const db = getPrisma();
+    try {
+      const updated = await db.$transaction(async (tx) => {
+        const current = await tx.ticket.findUnique({
+          where: { id: ticketId },
+          select: { id: true, ownerId: true },
+        });
+        if (!current) {
+          throw new TicketNotFoundInTransactionError();
+        }
+        if (current.ownerId !== null) {
+          throw new TicketAlreadyAssignedError();
+        }
+        return tx.ticket.update({
+          where: { id: ticketId },
+          data: { ownerId: user.id },
+          select: {
+            id: true,
+            owner: { select: { id: true, name: true, role: true } },
+          },
+        });
+      });
+
+      res.status(200).json({
+        data: { ticketId: updated.id, owner: updated.owner },
+      });
+    } catch (err) {
+      if (err instanceof TicketAlreadyAssignedError) {
+        return res.status(409).json({
+          error: {
+            message: "This Ticket is already assigned to an owner",
+            code: "TICKET_ALREADY_ASSIGNED",
+          },
+        });
+      }
+      if (err instanceof TicketNotFoundInTransactionError) {
+        return res.status(404).json({
+          error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
+        });
+      }
+      throw err;
+    }
+  } catch (err) {
+    console.error("Failed to claim ticket:", err);
+    res.status(500).json({
+      error: {
+        message: "Failed to claim ticket",
+        code: "INTERNAL_SERVER_ERROR",
+      },
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Assign / reassign ownership (FR-16 / AC-10 / BR-17, BR-18)
+// PUT /api/tickets/:ticketId/owner -> 200 { data: { ticketId, owner } }
+//   body: { ownerId } must reference an existing, ACTIVE IT_STAFF/ADMIN user;
+//   an inactive or wrong-role owner is indistinguishable from a missing user
+//   (404, no user enumeration).
+// ---------------------------------------------------------------------------
+app.put("/api/tickets/:ticketId/owner", async (req: Request, res: Response) => {
+  try {
+    const user = req.sessionUser;
+    if (!user) {
+      return res.status(401).json({
+        error: { message: "Authentication required", code: "UNAUTHORIZED" },
+      });
+    }
+    if (!isStaffRole(user.role)) {
+      return res.status(403).json({
+        error: {
+          message: "Only IT Staff or Administrator may assign a Ticket owner",
+          code: "FORBIDDEN",
+        },
+      });
+    }
+
+    const ticketId = Number(req.params.ticketId);
+    if (!Number.isInteger(ticketId) || ticketId <= 0) {
+      return res.status(404).json({
+        error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
+      });
+    }
+
+    const ownerId = (req.body ?? {}).ownerId;
+    if (!Number.isInteger(ownerId) || ownerId <= 0) {
+      return res.status(400).json({
+        error: {
+          message: "Validation failed",
+          code: "VALIDATION_ERROR",
+          details: { ownerId: "ownerId must be a valid user ID" },
+        },
+      });
+    }
+
+    const db = getPrisma();
+    const ticket = await db.ticket.findUnique({
+      where: { id: ticketId },
+      select: { id: true },
+    });
+    if (!ticket) {
+      return res.status(404).json({
+        error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
+      });
+    }
+
+    const owner = await db.user.findFirst({
+      where: {
+        id: ownerId,
+        isActive: true,
+        role: { in: [UserRole.IT_STAFF, UserRole.ADMIN] },
+      },
+      select: { id: true, name: true, role: true },
+    });
+    if (!owner) {
+      return res.status(404).json({
+        error: {
+          message: "The selected owner is not an active IT Staff or Administrator",
+          code: "OWNER_NOT_FOUND",
+        },
+      });
+    }
+
+    const updated = await db.ticket.update({
+      where: { id: ticketId },
+      data: { ownerId: owner.id },
+      select: {
+        id: true,
+        owner: { select: { id: true, name: true, role: true } },
+      },
+    });
+
+    res.status(200).json({
+      data: { ticketId: updated.id, owner: updated.owner },
+    });
+  } catch (err) {
+    console.error("Failed to assign owner:", err);
+    res.status(500).json({
+      error: {
+        message: "Failed to assign owner",
+        code: "INTERNAL_SERVER_ERROR",
+      },
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Internal Notes (FR-19 / FR-20 / AC-15, BR-24, BR-28)
+// GET  /api/tickets/:ticketId/notes -> 200 { data: [note, ...] } oldest first
+// POST /api/tickets/:ticketId/notes -> 201 { data: note }
+//   body: { content: 1-2000 chars after trim, whitespace-only rejected }
+//   IT_STAFF/ADMIN only; a Requester request is 403 with no note content
+//   exposed (BR-28).
+// ---------------------------------------------------------------------------
+app.get("/api/tickets/:ticketId/notes", async (req: Request, res: Response) => {
+  try {
+    const user = req.sessionUser;
+    if (!user) {
+      return res.status(401).json({
+        error: { message: "Authentication required", code: "UNAUTHORIZED" },
+      });
+    }
+    if (!isStaffRole(user.role)) {
+      return res.status(403).json({
+        error: {
+          message: "Only IT Staff or Administrator may view Internal Notes",
+          code: "FORBIDDEN",
+        },
+      });
+    }
+
+    const ticketId = Number(req.params.ticketId);
+    if (!Number.isInteger(ticketId) || ticketId <= 0) {
+      return res.status(404).json({
+        error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
+      });
+    }
+
+    const ticket = await getPrisma().ticket.findUnique({
+      where: { id: ticketId },
+      select: { id: true },
+    });
+    if (!ticket) {
+      return res.status(404).json({
+        error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
+      });
+    }
+
+    const notes = await getPrisma().internalNote.findMany({
+      where: { ticketId: ticket.id },
+      orderBy: { createdAt: "asc" },
+      include: { author: { select: { id: true, name: true } } },
+    });
+
+    res.status(200).json({ data: notes.map(toCommentShape) });
+  } catch (err) {
+    console.error("Failed to fetch notes:", err);
+    res.status(500).json({
+      error: {
+        message: "Failed to fetch notes",
+        code: "INTERNAL_SERVER_ERROR",
+      },
+    });
+  }
+});
+
+app.post("/api/tickets/:ticketId/notes", async (req: Request, res: Response) => {
+  try {
+    const user = req.sessionUser;
+    if (!user) {
+      return res.status(401).json({
+        error: { message: "Authentication required", code: "UNAUTHORIZED" },
+      });
+    }
+    if (!isStaffRole(user.role)) {
+      return res.status(403).json({
+        error: {
+          message: "Only IT Staff or Administrator may create Internal Notes",
+          code: "FORBIDDEN",
+        },
+      });
+    }
+
+    const ticketId = Number(req.params.ticketId);
+    if (!Number.isInteger(ticketId) || ticketId <= 0) {
+      return res.status(404).json({
+        error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
+      });
+    }
+
+    const ticket = await getPrisma().ticket.findUnique({
+      where: { id: ticketId },
+      select: { id: true },
+    });
+    if (!ticket) {
+      return res.status(404).json({
+        error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
+      });
+    }
+
+    const result = validateContent((req.body ?? {}).content);
+    if (!result.ok) {
+      return res.status(400).json({
+        error: {
+          message: "Validation failed",
+          code: "VALIDATION_ERROR",
+          details: { content: result.message },
+        },
+      });
+    }
+
+    const note = await getPrisma().internalNote.create({
+      data: { ticketId: ticket.id, authorId: user.id, content: result.value },
+      include: { author: { select: { id: true, name: true } } },
+    });
+
+    res.status(201).json({ data: toCommentShape(note) });
+  } catch (err) {
+    console.error("Failed to create note:", err);
+    res.status(500).json({
+      error: {
+        message: "Failed to create note",
         code: "INTERNAL_SERVER_ERROR",
       },
     });
@@ -1043,19 +1511,19 @@ app.post("/api/tickets/:ticketId/comments", async (req: Request, res: Response) 
     if (!access) return;
 
     const body = req.body ?? {};
-    const content = typeof body.content === "string" ? body.content.trim() : "";
-    if (content.length < 1 || content.length > 2000) {
+    const result = validateContent(body.content);
+    if (!result.ok) {
       return res.status(400).json({
         error: {
           message: "Validation failed",
           code: "VALIDATION_ERROR",
-          details: { content: "Content must be between 1 and 2000 characters" },
+          details: { content: result.message },
         },
       });
     }
 
     const comment = await getPrisma().publicComment.create({
-      data: { ticketId: access.ticketId, authorId: user.id, content },
+      data: { ticketId: access.ticketId, authorId: user.id, content: result.value },
       include: { author: { select: { id: true, name: true } } },
     });
 
@@ -1328,26 +1796,46 @@ app.post(
 // Get Attachment Metadata (AC-06 / AC-07)
 // GET /api/tickets/:ticketId/attachments[&includeRemoved=true]
 // Returns attachment metadata for the owner's ticket; soft-removed records are
-// hidden by default and shown only when includeRemoved=true.
+// hidden by default and shown only when includeRemoved=true. IT_STAFF/ADMIN
+// may read any Ticket's attachments (api-spec §4.17); a Requester may only
+// read their own (404 for cross-owner).
 // ---------------------------------------------------------------------------
 app.get("/api/tickets/:ticketId/attachments", async (req: Request, res: Response) => {
   try {
-    const requesterId = req.sessionUser?.id;
-    if (requesterId === undefined) {
+    const user = req.sessionUser;
+    if (user === undefined) {
       res.status(401).json({
         error: { message: "Authentication required", code: "UNAUTHORIZED" },
       });
       return;
     }
 
-    const detailRefs = await resolveTicketForRoute(req, res, requesterId);
-    if (!detailRefs) return;
+    const ticketId = Number(req.params.ticketId);
+    if (!Number.isInteger(ticketId) || ticketId <= 0) {
+      res.status(404).json({
+        error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
+      });
+      return;
+    }
+
+    const isStaff = isStaffRole(user.role);
+    const ticket = await getPrisma().ticket.findUnique({
+      where: { id: ticketId },
+      select: { id: true, submittedById: true },
+    });
+
+    if (!ticket || (!isStaff && ticket.submittedById !== user.id)) {
+      res.status(404).json({
+        error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
+      });
+      return;
+    }
 
     const includeRemoved = req.query.includeRemoved === "true";
 
     const attachments = await getPrisma().attachment.findMany({
       where: {
-        ticketId: detailRefs.ticketId,
+        ticketId: ticket.id,
         ...(includeRemoved ? {} : { isRemoved: false }),
       },
       orderBy: { id: "asc" },
@@ -1386,12 +1874,13 @@ app.get("/api/tickets/:ticketId/attachments", async (req: Request, res: Response
 // Download Attachment (AC-06 / BR-23)
 // GET /api/attachments/:attachmentId/download
 // Streams the stored file when owned and active. Removed attachments are not
-// downloadable (AC-07).
+// downloadable (AC-07). IT_STAFF/ADMIN may download any Ticket's active
+// attachments; a Requester may only download their own (404 cross-owner).
 // ---------------------------------------------------------------------------
 app.get("/api/attachments/:attachmentId/download", async (req: Request, res: Response) => {
   try {
-    const requesterId = req.sessionUser?.id;
-    if (requesterId === undefined) {
+    const user = req.sessionUser;
+    if (user === undefined) {
       res.status(401).json({
         error: { message: "Authentication required", code: "UNAUTHORIZED" },
       });
@@ -1418,7 +1907,8 @@ app.get("/api/attachments/:attachmentId/download", async (req: Request, res: Res
       return;
     }
 
-    if (attachment.ticket.submittedById !== requesterId) {
+    const isStaff = isStaffRole(user.role);
+    if (!isStaff && attachment.ticket.submittedById !== user.id) {
       res.status(404).json({
         error: { message: "Attachment not found", code: "ATTACHMENT_NOT_FOUND" },
       });
@@ -1668,6 +2158,69 @@ function toCommentShape(comment: {
     content: comment.content,
     createdAt: comment.createdAt,
   };
+}
+
+// Ticket detail row shape shared by GET and PATCH (api-spec §4.9/§4.10).
+const TICKET_DETAIL_INCLUDE = {
+  submitter: { select: { id: true, name: true, email: true } },
+  owner: { select: { id: true, name: true, role: true } },
+  category: { select: { id: true, name: true } },
+  relatedSystem: { select: { id: true, name: true } },
+  attachments: {
+    orderBy: { id: "asc" as const },
+    select: {
+      id: true,
+      originalFilename: true,
+      fileSizeBytes: true,
+      contentType: true,
+      uploadedAt: true,
+      isRemoved: true,
+      removedAt: true,
+      removalReason: true,
+    },
+  },
+  publicComments: {
+    orderBy: { createdAt: "asc" as const },
+    include: { author: { select: { id: true, name: true } } },
+  },
+  internalNotes: {
+    orderBy: { createdAt: "asc" as const },
+    include: { author: { select: { id: true, name: true } } },
+  },
+} satisfies Prisma.TicketInclude;
+
+type TicketDetailRow = Prisma.TicketGetPayload<{
+  include: typeof TICKET_DETAIL_INCLUDE;
+}>;
+
+// Viewer-aware detail serializer: Internal Notes are present only for
+// IT_STAFF/ADMIN; canIndicateResolved only for the submitting Requester;
+// permittedStatusTransitions derives from the transition matrix (§5.3).
+function toTicketDetail(
+  ticket: TicketDetailRow,
+  viewer: { id: number; role: UserRole }
+): Record<string, unknown> {
+  const isStaff = isStaffRole(viewer.role);
+  const data: Record<string, unknown> = {
+    ...ticket,
+    canIndicateResolved:
+      viewer.role === UserRole.REQUESTER &&
+      ticket.submittedById === viewer.id &&
+      ticket.indicatedResolvedAt === null &&
+      INDICATABLE_STATUSES.includes(ticket.currentStatus),
+    permittedStatusTransitions: getPermittedTransitions(
+      ticket.currentStatus,
+      viewer.role
+    ),
+    comments: ticket.publicComments.map(toCommentShape),
+  };
+  delete data.publicComments;
+  delete data.indicatedResolvedAt;
+  if (isStaff) {
+    data.notes = ticket.internalNotes.map(toCommentShape);
+  }
+  delete data.internalNotes;
+  return data;
 }
 
 // Central error handler: maps multer / file-type upload errors to the
