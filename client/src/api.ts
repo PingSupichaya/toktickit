@@ -150,6 +150,57 @@ export interface TicketQuery {
   pageSize?: number;
 }
 
+// FR-14 / BR-35..39 — IT Staff Ticket Queue (§4.8). The queue is a different
+// read surface than the Requester's My Tickets, so it has its own row type,
+// query interface, and fetch function instead of reusing fetchTickets.
+export type QueueAssignment =
+  | "unassigned"
+  | "assignedToMe"
+  | "all";
+
+export type QueueSortKey =
+  | "itPriority"
+  | "ticketDate"
+  | "updatedAt"
+  | "requestedPriority"
+  | "ticketNumber"
+  | "currentStatus";
+
+export interface QueueTicket {
+  id: number;
+  ticketNumber: string;
+  summary: string;
+  requestedPriority: RequestedPriority;
+  itPriority?: RequestedPriority | null;
+  currentStatus: string;
+  ticketDate: string;
+  updatedAt: string;
+  category: Category;
+  relatedSystem: RelatedSystem;
+  requester: { id: number; name: string; email: string };
+  owner?: { id: number; name: string; role: UserRole } | null;
+  attachmentCount: number;
+}
+
+export interface QueueQuery {
+  search?: string;
+  status?: string;
+  itPriority?: RequestedPriority;
+  categoryId?: number;
+  relatedSystemId?: number;
+  assignment?: QueueAssignment;
+  ownerId?: number;
+  sortBy?: QueueSortKey;
+  sortOrder?: "asc" | "desc";
+  page?: number;
+  pageSize?: number;
+}
+
+export interface QueuePage {
+  items: QueueTicket[];
+  pagination: PaginationMeta;
+}
+
 export interface PaginationMeta {
   page: number;
   pageSize: number;
@@ -273,6 +324,43 @@ export async function fetchTickets(query: TicketQuery): Promise<TicketPage> {
   }
   const body = (await res.json()) as TicketsResponse;
   return { items: body.data, pagination: body.pagination };
+}
+
+// AC-08 / BR-35..39 — IT Staff Ticket Queue (§4.8). Mirrors fetchTickets but
+// hits the staff-only queue endpoint and uses the queue's own row/query types
+// (the API's `itPriority` filter is sent as `priority`; see api-spec §4.8).
+export async function fetchQueue(query: QueueQuery): Promise<QueuePage> {
+  const params = new URLSearchParams();
+  if (query.search) params.set("search", query.search);
+  if (query.itPriority) params.set("priority", query.itPriority);
+  if (query.categoryId !== undefined) params.set("categoryId", String(query.categoryId));
+  if (query.relatedSystemId !== undefined) params.set("relatedSystemId", String(query.relatedSystemId));
+  if (query.status) params.set("status", query.status);
+  if (query.assignment) params.set("assignment", query.assignment);
+  if (query.ownerId !== undefined) params.set("ownerId", String(query.ownerId));
+  if (query.sortBy) params.set("sortBy", query.sortBy);
+  if (query.sortOrder) params.set("sortOrder", query.sortOrder);
+  if (query.page !== undefined) params.set("page", String(query.page));
+  if (query.pageSize !== undefined) params.set("pageSize", String(query.pageSize));
+
+  const res = await fetch(`${API_URL}/api/tickets/queue?${params.toString()}`, {
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as
+      | { error?: { message?: string; code?: string } }
+      | null;
+    const message =
+      (body as { error?: { message?: string } })?.error?.message ??
+      `Queue request failed with status ${res.status}`;
+    const err = new Error(message) as Error & { status?: number; code?: string };
+    err.status = res.status;
+    err.code = (body as { error?: { code?: string } })?.error?.code;
+    throw err;
+  }
+  const json = await res.json();
+  const body = json as DataResponse<QueueTicket[]>;
+  return { items: body.data, pagination: (json as { pagination: PaginationMeta }).pagination };
 }
 
 // AC-01 / FR-11 — create a ticket. Throws an Error with the server's safe

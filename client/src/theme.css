@@ -35,6 +35,24 @@
   --color-info: #2563eb;
   --color-info-bg: #eff6ff;
 
+  /* Ticket status badge tokens (docs/lab-03/ui-spec.md Section 2) */
+  --color-status-new-bg: #eaf6ef;
+  --color-status-new-text: #006b3c;
+  --color-status-open-bg: #eff6ff;
+  --color-status-open-text: #1d4ed8;
+  --color-status-inprogress-bg: #fef3c7;
+  --color-status-inprogress-text: #92400e;
+  --color-status-waiting-bg: #eef1f0;
+  --color-status-waiting-text: #475569;
+  --color-status-resolved-bg: #d1fae5;
+  --color-status-resolved-text: #065f46;
+  --color-status-closed-bg: #f0f0f0;
+  --color-status-closed-text: #5a6f65;
+  --color-status-reopened-bg: #fdf0f2;
+  --color-status-reopened-text: #b91c1c;
+  --color-status-cancelled-bg: #fdf0f2;
+  --color-status-cancelled-text: #c41e3a;
+
   /* Typography */
   --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
@@ -1327,8 +1345,43 @@ button {
 }
 
 .badge--status {
-  background-color: var(--color-pale-green);
-  color: var(--color-success);
+  background-color: var(--color-status-new-bg);
+  color: var(--color-status-new-text);
+}
+
+.badge--status[data-value="OPEN"] {
+  background-color: var(--color-status-open-bg);
+  color: var(--color-status-open-text);
+}
+
+.badge--status[data-value="IN_PROGRESS"] {
+  background-color: var(--color-status-inprogress-bg);
+  color: var(--color-status-inprogress-text);
+}
+
+.badge--status[data-value="WAITING_FOR_REQUESTER"] {
+  background-color: var(--color-status-waiting-bg);
+  color: var(--color-status-waiting-text);
+}
+
+.badge--status[data-value="RESOLVED"] {
+  background-color: var(--color-status-resolved-bg);
+  color: var(--color-status-resolved-text);
+}
+
+.badge--status[data-value="CLOSED"] {
+  background-color: var(--color-status-closed-bg);
+  color: var(--color-status-closed-text);
+}
+
+.badge--status[data-value="REOPENED"] {
+  background-color: var(--color-status-reopened-bg);
+  color: var(--color-status-reopened-text);
+}
+
+.badge--status[data-value="CANCELLED"] {
+  background-color: var(--color-status-cancelled-bg);
+  color: var(--color-status-cancelled-text);
 }
 
 .badge--category {
@@ -2193,4 +2246,228 @@ input[type="password"]::-ms-clear {
   .app-header__right .app-header__logout {
     display: none;
   }
+}
+
+/* Staff Ticket Queue (ui-spec 6.2) */
+.queue {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.queue__title {
+  margin-bottom: var(--space-6);
+}
+
+.queue__row1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.queue__search {
+  min-width: 240px;
+  max-width: 360px;
+  height: 48px;
+}
+
+.queue__count {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.queue__row2 {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-6);
+}
+
+.queue__row2 .select-control {
+  flex: 1 1 150px;
+  min-width: 0;
+}
+
+.queue__clear {
+  align-self: flex-end;
+}
+
+.queue__loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.queue-skeleton {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.queue-skeleton__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Desktop table (shown >= 1024px) */
+.queue-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.queue-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.queue-table td {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--color-border-lighter);
+  vertical-align: top;
+}
+
+.queue-table__row:hover {
+  background-color: var(--color-bg-hover, var(--color-pale-green));
+  cursor: pointer;
+}
+
+.queue-table__number {
+  display: block;
+  font-weight: 600;
+}
+
+.queue-table__date {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.queue-table__summary {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 260px;
+}
+
+.queue-table__meta {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.queue-table__name {
+  display: block;
+  font-weight: 500;
+}
+
+.queue-table__email {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.queue-table__muted {
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+}
+
+.queue-table__role-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-top: var(--space-1);
+  padding: 0 var(--space-2);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+  background-color: var(--color-bg-readonly);
+  border: 1px solid var(--color-border);
+}
+
+/* Mobile / tablet (< 1024px): card list */
+.queue-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.queue-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  text-align: left;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background-color: #fff;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.queue-card:hover {
+  background-color: var(--color-pale-green);
+}
+
+.queue-card__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.queue-card__number {
+  font-weight: 600;
+}
+
+.queue-card__summary {
+  font-size: 0.9375rem;
+}
+
+.queue-card__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+@media (min-width: 1024px) {
+  .queue-cards {
+    display: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .queue-table {
+    display: none;
+  }
+}
+
+.queue__pagination {
+  margin-top: var(--space-6);
 }

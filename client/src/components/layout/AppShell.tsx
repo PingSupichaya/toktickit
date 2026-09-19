@@ -7,6 +7,7 @@ import { RoleBadge } from "../ui/RoleBadge.js";
 import { Card } from "../ui/Card.js";
 import { TicketForm } from "../features/TicketForm.js";
 import { MyTickets } from "../features/MyTickets.js";
+import { StaffTicketQueue } from "../features/StaffTicketQueue.js";
 import { TicketDetail } from "../features/TicketDetail.js";
 
 type ShellView = "my-tickets" | "create-ticket" | "ticket-detail" | "queue" | "users";
@@ -110,7 +111,7 @@ function ShellContent() {
 
       <main className="container" style={{ padding: "var(--space-8) var(--space-6)" }}>
         {activeView === "queue" ? (
-          <DeferredPanel title="Ticket Queue" />
+          <StaffTicketQueue />
         ) : activeView === "users" ? (
           <DeferredPanel title="User Management" />
         ) : activeView === "create-ticket" ? (
