@@ -123,6 +123,7 @@ export interface TicketDetail extends Ticket {
   comments?: PublicComment[];
   notes?: PublicComment[];
   canIndicateResolved?: boolean;
+  permittedStatusTransitions?: TicketStatus[];
 }
 
 export interface TicketSummary {
@@ -618,4 +619,78 @@ export async function requesterRespond(
         : {}),
     }
   );
+}
+
+// ---------------------------------------------------------------------------
+// Lab 3 — IT Staff Ticket Operations (FR-16..FR-18 / §4.10..§4.12)
+// ---------------------------------------------------------------------------
+
+export interface EligibleOwner {
+  id: number;
+  name: string;
+  role: UserRole;
+}
+
+export interface ClaimResult {
+  ticketId: number;
+  owner: { id: number; name: string; role: UserRole };
+}
+
+export interface AssignOwnerResult {
+  ticketId: number;
+  owner: { id: number; name: string; role: UserRole };
+}
+
+export interface OperationalUpdateInput {
+  itPriority?: RequestedPriority;
+  currentStatus?: TicketStatus;
+}
+
+// AC-10 / BR-17 (supplementary) — active IT_STAFF/ADMIN users for the
+// ui-spec §6.3 Owner reassignment select. Staff-only (403 for Requester).
+export async function fetchEligibleOwners(): Promise<EligibleOwner[]> {
+  return authJson<EligibleOwner[]>("/api/tickets/eligible-owners");
+}
+
+// FR-16 / AC-09 / BR-18 — claim an unassigned Ticket for the caller.
+// 409 TICKET_ALREADY_ASSIGNED when the Ticket already has an owner.
+export async function claimTicket(ticketId: number): Promise<ClaimResult> {
+  return authJson<ClaimResult>(`/api/tickets/${ticketId}/claim`, {
+    method: "POST",
+  });
+}
+
+// FR-16 / AC-10 / BR-17 — assign/reassign ownership to an eligible user.
+export async function assignOwner(
+  ticketId: number,
+  ownerId: number
+): Promise<AssignOwnerResult> {
+  return authJson<AssignOwnerResult>(`/api/tickets/${ticketId}/owner`, {
+    method: "PUT",
+    body: JSON.stringify({ ownerId }),
+  });
+}
+
+// FR-17 / FR-18 / AC-11, AC-12 — update operational fields (IT Priority or
+// status). The server validates status against the transition matrix using the
+// current status read in the same transaction (409 on a disallowed move).
+export async function updateTicketOperational(
+  ticketId: number,
+  input: OperationalUpdateInput
+): Promise<TicketDetail> {
+  return authJson<TicketDetail>(`/api/tickets/${ticketId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+// FR-19 / BR-24 — create an Internal Note (visible to IT Staff/Admin only).
+export async function postNote(
+  ticketId: number,
+  content: string
+): Promise<PublicComment> {
+  return authJson<PublicComment>(`/api/tickets/${ticketId}/notes`, {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  });
 }

@@ -8,9 +8,16 @@ import { Card } from "../ui/Card.js";
 import { TicketForm } from "../features/TicketForm.js";
 import { MyTickets } from "../features/MyTickets.js";
 import { StaffTicketQueue } from "../features/StaffTicketQueue.js";
+import { StaffTicketDetail } from "../features/StaffTicketDetail.js";
 import { TicketDetail } from "../features/TicketDetail.js";
 
-type ShellView = "my-tickets" | "create-ticket" | "ticket-detail" | "queue" | "users";
+type ShellView =
+  | "my-tickets"
+  | "create-ticket"
+  | "ticket-detail"
+  | "queue"
+  | "staff-ticket-detail"
+  | "users";
 
 const NAV_ITEMS_BY_ROLE: Record<UserRole, { id: ShellView; label: string }[]> = {
   REQUESTER: [
@@ -111,7 +118,17 @@ function ShellContent() {
 
       <main className="container" style={{ padding: "var(--space-8) var(--space-6)" }}>
         {activeView === "queue" ? (
-          <StaffTicketQueue />
+          <StaffTicketQueue
+            onOpenTicket={(ticket) => {
+              setSelectedTicketId(ticket.id);
+              setActiveView("staff-ticket-detail");
+            }}
+          />
+        ) : activeView === "staff-ticket-detail" && selectedTicketId !== null ? (
+          <StaffTicketDetail
+            ticketId={selectedTicketId}
+            onBack={() => navigate("queue")}
+          />
         ) : activeView === "users" ? (
           <DeferredPanel title="User Management" />
         ) : activeView === "create-ticket" ? (

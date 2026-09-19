@@ -134,7 +134,11 @@ function PriorityBadge({ priority }: { priority: string }) {
   );
 }
 
-export function StaffTicketQueue() {
+export function StaffTicketQueue({
+  onOpenTicket,
+}: {
+  onOpenTicket?: (ticket: QueueTicket) => void;
+} = {}) {
   const [filters, setFilters] = useState<ToolbarState>(() => applyFilters({}));
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -399,7 +403,27 @@ export function StaffTicketQueue() {
             </thead>
             <tbody>
               {tickets.map((ticket) => (
-                <tr key={ticket.id} className="queue-table__row">
+                <tr
+                  key={ticket.id}
+                  className="queue-table__row"
+                  onClick={onOpenTicket ? () => onOpenTicket(ticket) : undefined}
+                  onKeyDown={
+                    onOpenTicket
+                      ? (e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            onOpenTicket(ticket);
+                          }
+                        }
+                      : undefined
+                  }
+                  tabIndex={onOpenTicket ? 0 : undefined}
+                  aria-label={
+                    onOpenTicket
+                      ? `Open ticket ${ticket.ticketNumber}`
+                      : undefined
+                  }
+                >
                   <td>
                     <span className="queue-table__number">{ticket.ticketNumber}</span>
                     <span className="queue-table__date">
@@ -457,6 +481,7 @@ export function StaffTicketQueue() {
                   type="button"
                   className="queue-card"
                   aria-label={`Open ticket ${ticket.ticketNumber}`}
+                  onClick={onOpenTicket ? () => onOpenTicket(ticket) : undefined}
                 >
                   <span className="queue-card__row">
                     <span className="queue-card__number">{ticket.ticketNumber}</span>
