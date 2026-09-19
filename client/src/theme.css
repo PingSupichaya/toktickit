@@ -2194,3 +2194,227 @@ input[type="password"]::-ms-clear {
     display: none;
   }
 }
+
+/* Staff Ticket Queue (ui-spec 6.2) */
+.queue {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.queue__title {
+  margin-bottom: var(--space-6);
+}
+
+.queue__row1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.queue__search {
+  min-width: 240px;
+  max-width: 360px;
+  height: 48px;
+}
+
+.queue__count {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.queue__row2 {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-6);
+}
+
+.queue__row2 .select-control {
+  flex: 1 1 150px;
+  min-width: 0;
+}
+
+.queue__clear {
+  align-self: flex-end;
+}
+
+.queue__loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.queue-skeleton {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.queue-skeleton__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Desktop table (shown >= 1024px) */
+.queue-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.queue-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.queue-table td {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--color-border-lighter);
+  vertical-align: top;
+}
+
+.queue-table__row:hover {
+  background-color: var(--color-bg-hover, var(--color-pale-green));
+  cursor: pointer;
+}
+
+.queue-table__number {
+  display: block;
+  font-weight: 600;
+}
+
+.queue-table__date {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.queue-table__summary {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 260px;
+}
+
+.queue-table__meta {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.queue-table__name {
+  display: block;
+  font-weight: 500;
+}
+
+.queue-table__email {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.queue-table__muted {
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+}
+
+.queue-table__role-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-top: var(--space-1);
+  padding: 0 var(--space-2);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+  background-color: var(--color-bg-readonly);
+  border: 1px solid var(--color-border);
+}
+
+/* Mobile / tablet (< 1024px): card list */
+.queue-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.queue-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  text-align: left;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background-color: #fff;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.queue-card:hover {
+  background-color: var(--color-pale-green);
+}
+
+.queue-card__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.queue-card__number {
+  font-weight: 600;
+}
+
+.queue-card__summary {
+  font-size: 0.9375rem;
+}
+
+.queue-card__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+@media (min-width: 1024px) {
+  .queue-cards {
+    display: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .queue-table {
+    display: none;
+  }
+}
+
+.queue__pagination {
+  margin-top: var(--space-6);
+}

@@ -20,6 +20,7 @@ const emptyPage: api.TicketPage = {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(api.fetchTickets).mockResolvedValue(emptyPage);
+  vi.mocked(api.fetchQueue).mockResolvedValue({ ...emptyPage, items: [] });
   vi.mocked(api.fetchCategories).mockResolvedValue([]);
   vi.mocked(api.fetchRelatedSystems).mockResolvedValue([]);
 });

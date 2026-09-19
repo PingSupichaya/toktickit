@@ -374,20 +374,224 @@ app.get("/api/related-systems", async (_req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
-// IT Staff Ticket Queue (Lab 3, deferred to the IT Staff issue). The role
-// guard is wired now so the role matrix is enforced (Requester → 403, BR-36);
-// authorized staff/admins currently receive 404 until the queue is shipped.
+// IT Staff Ticket Queue (FR-14, BR-36..BR-39). GET /api/tickets/queue returns
+// the shared queue across all Requesters to IT_STAFF/ADMIN users.
+//
+// Query params:
+//   search         case-insensitive substring over ticketNumber, summary,
+//                  description, Requester name, Requester email (BR-37)
+//   status | priority (itPriority) | categoryId | relatedSystemId | assignment
+//                  filters combine with AND logic (BR-38). assignment is one of
+//                  `unassigned` | `assignedToMe` | `all`; ownerId narrows the
+//                  specific owner and is ignored unless assignment is `all` or
+//                  absent (api-spec §4.8).
+//   sortBy         itPriority | ticketDate | updatedAt | requestedPriority |
+//                  ticketNumber | currentStatus (default ordering when absent:
+//                  itPriority DESC, ticketDate ASC — D-10 / BR-39)
+//   sortOrder      asc | desc (default asc when sortBy is provided)
+//   page/pageSize  10/25/50 (default 10); invalid values fall back to defaults.
+// Invalid enum/assignment/ownerId values -> 400 INVALID_PARAMETERS (API-20).
 // ---------------------------------------------------------------------------
+const QUEUE_SORT_FIELDS = [
+  "ticketDate",
+  "updatedAt",
+  "itPriority",
+  "requestedPriority",
+  "ticketNumber",
+  "currentStatus",
+] as const;
+type QueueSortField = (typeof QUEUE_SORT_FIELDS)[number];
+
+const QUEUE_ASSIGNMENTS = ["unassigned", "assignedToMe", "all"] as const;
+type QueueAssignment = (typeof QUEUE_ASSIGNMENTS)[number];
+
 app.get(
   "/api/tickets/queue",
   requireRole(UserRole.IT_STAFF, UserRole.ADMIN),
-  (_req: Request, res: Response) => {
-    res.status(404).json({
-      error: {
-        message: "Ticket queue is not available yet",
-        code: "NOT_FOUND",
-      },
-    });
+  async (req: Request, res: Response) => {
+    try {
+      const q = req.query;
+      const sessionUserId = req.sessionUser?.id;
+      if (sessionUserId === undefined) {
+        return res.status(401).json({
+          error: { message: "Authentication required", code: "UNAUTHORIZED" },
+        });
+      }
+
+      const details: Record<string, string> = {};
+
+      let status: TicketStatus | undefined;
+      if (q.status !== undefined && q.status !== "") {
+        if (STATUSES.includes(q.status as TicketStatus)) {
+          status = q.status as TicketStatus;
+        } else {
+          details.status =
+            'Status must be "NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "RESOLVED", "CLOSED", "REOPENED", or "CANCELLED"';
+        }
+      }
+
+      let priority: RequestedPriority | undefined;
+      if (q.priority !== undefined && q.priority !== "") {
+        if (PRIORITIES.includes(q.priority as RequestedPriority)) {
+          priority = q.priority as RequestedPriority;
+        } else {
+          details.priority = 'Priority must be "LOW", "MEDIUM", or "HIGH"';
+        }
+      }
+
+      let categoryId: number | undefined;
+      if (q.categoryId !== undefined) {
+        categoryId = Number(q.categoryId);
+        if (!Number.isInteger(categoryId) || categoryId <= 0) {
+          details.categoryId = "Category ID must be a valid integer";
+        }
+      }
+
+      let relatedSystemId: number | undefined;
+      if (q.relatedSystemId !== undefined) {
+        relatedSystemId = Number(q.relatedSystemId);
+        if (!Number.isInteger(relatedSystemId) || relatedSystemId <= 0) {
+          details.relatedSystemId = "Related system ID must be a valid integer";
+        }
+      }
+
+      let assignment: QueueAssignment | undefined;
+      if (q.assignment !== undefined && q.assignment !== "") {
+        if (QUEUE_ASSIGNMENTS.includes(q.assignment as QueueAssignment)) {
+          assignment = q.assignment as QueueAssignment;
+        } else {
+          details.assignment =
+            'Assignment must be "unassigned", "assignedToMe", or "all"';
+        }
+      }
+
+      let ownerId: number | undefined;
+      if (q.ownerId !== undefined) {
+        ownerId = Number(q.ownerId);
+        if (!Number.isInteger(ownerId) || ownerId <= 0) {
+          details.ownerId = "Owner ID must be a valid integer";
+        }
+      }
+
+      if (Object.keys(details).length > 0) {
+        return res.status(400).json({
+          error: {
+            message: "Invalid query parameters",
+            code: "INVALID_PARAMETERS",
+            details,
+          },
+        });
+      }
+
+      const where: Prisma.TicketWhereInput = {};
+      if (status !== undefined) where.currentStatus = status;
+      if (priority !== undefined) where.itPriority = priority;
+      if (categoryId !== undefined) where.categoryId = categoryId;
+      if (relatedSystemId !== undefined) where.relatedSystemId = relatedSystemId;
+
+      if (assignment === "unassigned") {
+        where.ownerId = null;
+      } else if (assignment === "assignedToMe") {
+        where.ownerId = sessionUserId;
+      } else if (ownerId !== undefined) {
+        // `all` or assignment absent: narrow to the specific owner (BR-38).
+        where.ownerId = ownerId;
+      }
+
+      if (typeof q.search === "string" && q.search.trim() !== "") {
+        const term = q.search.trim();
+        where.OR = [
+          { ticketNumber: { contains: term, mode: "insensitive" } },
+          { summary: { contains: term, mode: "insensitive" } },
+          { description: { contains: term, mode: "insensitive" } },
+          { submitter: { name: { contains: term, mode: "insensitive" } } },
+          { submitter: { email: { contains: term, mode: "insensitive" } } },
+        ];
+      }
+
+      const sortOrder: Prisma.SortOrder =
+        q.sortOrder === "desc" ? "desc" : "asc";
+      const requestedSort =
+        typeof q.sortBy === "string" ? q.sortBy : "";
+      const orderBy: Prisma.TicketOrderByWithRelationInput[] =
+        (QUEUE_SORT_FIELDS as readonly string[]).includes(requestedSort)
+          ? ([{ [requestedSort as QueueSortField]: sortOrder },
+              { ticketDate: "asc" }] as Prisma.TicketOrderByWithRelationInput[])
+          : [{ itPriority: "desc" }, { ticketDate: "asc" }];
+
+      // Invalid page / pageSize fall back to defaults (BR-39 / API-20).
+      const pageSize = PAGE_SIZES.includes(Number(q.pageSize))
+        ? Number(q.pageSize)
+        : 10;
+      const page =
+        Number.isInteger(Number(q.page)) && Number(q.page) >= 1
+          ? Number(q.page)
+          : 1;
+
+      const [totalCount, rows] = await Promise.all([
+        getPrisma().ticket.count({ where }),
+        getPrisma().ticket.findMany({
+          where,
+          orderBy,
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+          select: {
+            id: true,
+            ticketNumber: true,
+            summary: true,
+            requestedPriority: true,
+            itPriority: true,
+            currentStatus: true,
+            ticketDate: true,
+            updatedAt: true,
+            category: { select: { id: true, name: true } },
+            relatedSystem: { select: { id: true, name: true } },
+            submitter: { select: { id: true, name: true, email: true } },
+            owner: { select: { id: true, name: true, role: true } },
+            _count: {
+              select: { attachments: { where: { isRemoved: false } } },
+            },
+          },
+        }),
+      ]);
+
+      const data = rows.map((r) => ({
+        id: r.id,
+        ticketNumber: r.ticketNumber,
+        summary: r.summary,
+        requestedPriority: r.requestedPriority,
+        itPriority: r.itPriority,
+        currentStatus: r.currentStatus,
+        ticketDate: r.ticketDate,
+        updatedAt: r.updatedAt,
+        category: r.category,
+        relatedSystem: r.relatedSystem,
+        requester: r.submitter,
+        owner: r.owner,
+        attachmentCount: r._count.attachments,
+      }));
+
+      const totalPages = Math.ceil(totalCount / pageSize);
+      res.status(200).json({
+        data,
+        pagination: {
+          page,
+          pageSize,
+          totalCount,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPreviousPage: page > 1,
+        },
+      });
+    } catch (err) {
+      console.error("Failed to fetch ticket queue:", err);
+      res.status(500).json({
+        error: {
+          message: "Failed to fetch ticket queue",
+          code: "INTERNAL_SERVER_ERROR",
+        },
+      });
+    }
   }
 );
 
