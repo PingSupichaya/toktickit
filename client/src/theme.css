@@ -2717,3 +2717,392 @@ input[type="password"]::-ms-clear {
     width: 100%;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Lab 3 — User Management (ui-spec 6.4)
+   --------------------------------------------------------------------------- */
+.user-mgmt {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.user-mgmt__title {
+  margin-bottom: var(--space-6);
+}
+
+.user-mgmt__controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.user-mgmt__search {
+  min-width: 240px;
+  max-width: 360px;
+  height: 48px;
+}
+
+.user-mgmt__filters {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-6);
+}
+
+.user-mgmt__filters .select-control {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.user-mgmt__clear {
+  align-self: flex-end;
+}
+
+.user-mgmt__banner {
+  margin-bottom: var(--space-4);
+}
+
+.user-mgmt__loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* Desktop / tablet table (shown >= 1024px) */
+.user-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.user-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.user-table td {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--color-border-lighter);
+  vertical-align: middle;
+}
+
+.user-table__name {
+  display: block;
+  font-weight: 600;
+}
+
+.user-table__created {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.user-table__email {
+  display: block;
+  font-size: 0.8125rem;
+  color: var(--color-text-primary);
+}
+
+/* Mobile / tablet card list (< 1024px) */
+.user-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.user-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background-color: var(--color-bg-surface);
+}
+
+.user-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.user-card__name {
+  font-weight: 600;
+}
+
+.user-card__email {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+.user-card__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+.user-card .btn {
+  align-self: flex-start;
+}
+
+@media (min-width: 1024px) {
+  .user-cards {
+    display: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .user-table {
+    display: none;
+  }
+}
+
+/* Active / Inactive status pill — text label first, color supplementary
+   (ui-spec 9). */
+.user-status {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-2);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background-color: var(--color-bg-readonly);
+  border: 1px solid var(--color-border);
+}
+
+.user-status--active {
+  color: var(--color-success);
+  background-color: var(--color-pale-green);
+  border-color: transparent;
+}
+
+/* Toggle switch (ui-spec 6.4 "Active" control) */
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.toggle--disabled {
+  opacity: 0.7;
+}
+
+.toggle__switch {
+  width: 48px;
+  height: 28px;
+  padding: 0;
+  border-radius: 999px;
+  background-color: var(--color-bg-readonly);
+  border: 1px solid var(--color-border);
+  position: relative;
+  cursor: pointer;
+  transition: background-color 200ms ease, border-color 200ms ease;
+  flex-shrink: 0;
+}
+
+.toggle__switch--on {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.toggle__thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background-color: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 200ms ease;
+}
+
+.toggle__switch--on .toggle__thumb {
+  transform: translateX(20px);
+}
+
+.toggle__switch:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.toggle__switch:disabled {
+  cursor: not-allowed;
+}
+
+.toggle__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.toggle__label {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.toggle__hint {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+/* Side panel — create/edit user panel (ui-spec 6.4, responsive 8) */
+.side-panel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background-color: rgba(15, 23, 42, 0.45);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.side-panel {
+  width: 100%;
+  max-width: 520px;
+  height: 100%;
+  background-color: var(--color-bg-surface);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  animation: side-panel-in 220ms ease;
+}
+
+@keyframes side-panel-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.side-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.side-panel__title {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.side-panel__close {
+  appearance: none;
+  background: none;
+  border: none;
+  width: 44px;
+  height: 44px;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  border-radius: var(--radius-control);
+}
+
+.side-panel__close:hover,
+.side-panel__close:focus-visible {
+  color: var(--color-primary-hover);
+  background-color: var(--color-bg-hover, var(--color-pale-green));
+}
+
+.side-panel__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-6);
+}
+
+.user-panel__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.user-panel__banner {
+  margin-bottom: var(--space-4);
+}
+
+.user-panel__actions {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-top: var(--space-2);
+}
+
+.user-panel__reset {
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.user-panel__reset-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.user-panel__reset-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.user-panel__reset-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.user-panel__reset-actions {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+@media (max-width: 767px) {
+  .side-panel-overlay {
+    justify-content: flex-start;
+  }
+
+  .side-panel {
+    max-width: none;
+    width: 100%;
+  }
+
+  .user-panel__actions .btn,
+  .user-panel__reset-actions .btn {
+    width: 100%;
+  }
+}

@@ -10,6 +10,7 @@ import { MyTickets } from "../features/MyTickets.js";
 import { StaffTicketQueue } from "../features/StaffTicketQueue.js";
 import { StaffTicketDetail } from "../features/StaffTicketDetail.js";
 import { TicketDetail } from "../features/TicketDetail.js";
+import { UserList } from "../features/UserList.js";
 
 type ShellView =
   | "my-tickets"
@@ -30,20 +31,6 @@ const NAV_ITEMS_BY_ROLE: Record<UserRole, { id: ShellView; label: string }[]> = 
     { id: "users", label: "User Management" },
   ],
 };
-
-function DeferredPanel({ title }: { title: string }) {
-  return (
-    <Card>
-      <div className="state">
-        <h3 className="state__title">{title}</h3>
-        <p className="state__message">
-          This screen is under construction and will be available in a later
-          release.
-        </p>
-      </div>
-    </Card>
-  );
-}
 
 function ShellContent() {
   const { user, logout } = useAuth();
@@ -113,6 +100,20 @@ function ShellContent() {
           <Button variant="ghost" className="app-header__logout" data-testid="logout-btn" onClick={() => logout()}>
             Logout
           </Button>
+          {/* Mobile (< 768px): the inline nav is hidden, so this opens the
+              full-screen navigation overlay (ui-spec §4). */}
+          <button
+            type="button"
+            className="app-header__hamburger"
+            aria-label="Open menu"
+            aria-expanded={menuOpen}
+            data-testid="menu-btn"
+            onClick={() => setMenuOpen(true)}
+          >
+            <span aria-hidden="true" />
+            <span aria-hidden="true" />
+            <span aria-hidden="true" />
+          </button>
         </div>
       </header>
 
@@ -130,7 +131,7 @@ function ShellContent() {
             onBack={() => navigate("queue")}
           />
         ) : activeView === "users" ? (
-          <DeferredPanel title="User Management" />
+          <UserList />
         ) : activeView === "create-ticket" ? (
           <div className="create-ticket-page">
             <h1 className="screen-title">Create Ticket</h1>

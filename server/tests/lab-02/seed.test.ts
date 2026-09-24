@@ -87,27 +87,55 @@ describe("Seed data (T-022)", () => {
     });
   });
 
-  // Idempotency is asserted against the reference tables the re-seed upserts
-  // (categories, systems). Users and tickets are intentionally excluded: their
-  // row counts are mutated by every other API suite running in parallel against
-  // the same shared database, so an exact before/after count only races.
+  // Idempotency is asserted with name-scoped counts on the reference tables
+  // the re-seed upserts (categories, systems): upserting the same natural key
+  // twice must never create a second row. A global exact before/after count is
+  // NOT asserted here — sibling suites legitimately insert their own reference
+  // fixtures (one category + one related system per beforeAll) against this
+  // same shared database, so a global count only races. Users and tickets are
+  // excluded for the same reason (see above).
   it("is idempotent: re-running the seed does not duplicate records", async () => {
-    const countsBefore = {
-      categories: await prisma.category.count(),
-      systems: await prisma.relatedSystem.count(),
-    };
+    const CATEGORY_MARKER = "T022 Seed Idempotency Category";
+    const SYSTEM_MARKER = "T022 Seed Idempotency System";
 
+    // Clean slate: fixed marker names plus cleanup make this repeatable with
+    // no residue, even after an aborted run.
+    await prisma.category.deleteMany({ where: { name: CATEGORY_MARKER } });
+    await prisma.relatedSystem.deleteMany({ where: { name: SYSTEM_MARKER } });
+
+    // Re-running the upsert (what the seed does per reference row) twice.
+    for (let i = 0; i < 2; i++) {
+      await prisma.category.upsert({
+        where: { name: CATEGORY_MARKER },
+        update: {},
+        create: { name: CATEGORY_MARKER, isActive: true },
+      });
+      await prisma.relatedSystem.upsert({
+        where: { name: SYSTEM_MARKER },
+        update: {},
+        create: { name: SYSTEM_MARKER, isActive: true },
+      });
+    }
+
+    await expect(
+      prisma.category.count({ where: { name: CATEGORY_MARKER } })
+    ).resolves.toBe(1);
+    await expect(
+      prisma.relatedSystem.count({ where: { name: SYSTEM_MARKER } })
+    ).resolves.toBe(1);
+
+    // Upserting an already-seeded row is a no-op (scoped count is race-proof:
+    // sibling fixtures always use different names).
     await prisma.category.upsert({
       where: { name: "Account and Access" },
       update: {},
       create: { name: "Account and Access", isActive: true },
     });
+    await expect(
+      prisma.category.count({ where: { name: "Account and Access" } })
+    ).resolves.toBe(1);
 
-    const countsAfter = {
-      categories: await prisma.category.count(),
-      systems: await prisma.relatedSystem.count(),
-    };
-
-    expect(countsAfter).toEqual(countsBefore);
+    await prisma.category.deleteMany({ where: { name: CATEGORY_MARKER } });
+    await prisma.relatedSystem.deleteMany({ where: { name: SYSTEM_MARKER } });
   });
 });
