@@ -96,7 +96,7 @@ test("E2E-01 authentication workflow: valid login, safe error, logout, screensho
   await setViewport(page, "desktop");
   await gotoLogin(page);
 
-  await shot(page, "login-desktop.png");
+  await shot(page, "desktop-login.png");
   await expect(page.locator('[data-testid="login-submit-btn"]')).toBeDisabled();
   await expect(page.getByRole("heading", { name: "TokTickIT" })).toBeVisible();
 
@@ -107,14 +107,14 @@ test("E2E-01 authentication workflow: valid login, safe error, logout, screensho
   await expect(page.locator('[data-testid="error-email"]')).toContainText(
     "Enter a valid email address"
   );
-  await shot(page, "login-validation.png");
+  await shot(page, "desktop-login-validation.png");
 
   // Invalid credentials -> safe generic banner (never leaks account details).
   await submitLogin(page, INVALID_EMAIL, "wrong-password");
   await expect(page.locator('[data-testid="login-error"]')).toContainText(
     "Invalid email or password"
   );
-  await shot(page, "login-error.png");
+  await shot(page, "desktop-login-error.png");
   await expect(page.locator('[data-testid="logout-btn"]')).toHaveCount(0);
 
   // Valid login -> shell with name and role badge.
@@ -129,6 +129,11 @@ test("E2E-01 authentication workflow: valid login, safe error, logout, screensho
   // Logout returns to the Login screen.
   await page.locator('[data-testid="logout-btn"]').click();
   await expect(page.locator('[data-testid="login-email"]')).toBeVisible();
+
+  // Mobile capture of the Login screen (ui-spec §12).
+  await setViewport(page, "mobile");
+  await shot(page, "mobile-login.png");
+  await setViewport(page, "desktop");
 
   expect(errs).toEqual([]);
 });
@@ -147,12 +152,12 @@ test("E2E-02 first-login password change gates the app", async ({ page }) => {
   await page.locator('[data-testid="current-password"]').fill(FIRST_LOGIN.password);
   await page.locator('[data-testid="new-password"]').fill("short");
   await expect(page.locator('[data-testid="password-rule-1"]')).not.toHaveClass(/is-met/);
-  await shot(page, "change-password-desktop.png");
+  await shot(page, "desktop-change-password.png");
   await expect(page.locator('[data-testid="change-password-btn"]')).toBeDisabled();
 
   // Mobile capture of the same screen.
   await setViewport(page, "mobile");
-  await shot(page, "change-password-mobile.png");
+  await shot(page, "mobile-change-password.png");
   await setViewport(page, "desktop");
 
   // A valid new password + matching confirmation opens the shell.

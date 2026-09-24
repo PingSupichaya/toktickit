@@ -52,6 +52,11 @@ export function Select<T extends string | number>({
 
   const selected = options.find((o) => o.value === value);
 
+  // Accessible name for the combobox and its listbox (axe UI-12: a
+  // role="combobox" must have an accessible name).
+  const accessibleName =
+    labelText ?? (typeof label === "string" ? label : "Select");
+
   useEffect(() => {
     if (!open) return;
     function onDocClick(e: MouseEvent) {
@@ -122,6 +127,7 @@ export function Select<T extends string | number>({
       <div
         className="select-control__wrap"
         role="combobox"
+        aria-label={accessibleName}
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-controls={`${fieldId}-listbox`}
@@ -162,9 +168,7 @@ export function Select<T extends string | number>({
             className="select-control__menu"
             id={`${fieldId}-listbox`}
             role="listbox"
-            aria-label={
-              labelText ?? (typeof label === "string" ? label : "Select")
-            }
+            aria-label={accessibleName}
           >
             {options.map((opt, i) => {
               const isSelected = opt.value === value;

@@ -212,26 +212,26 @@ Verified by manual inspection and Playwright screenshot capture, per `ui-spec.md
 
 ### Playwright Screenshots Required — `artifacts/lab-03/screenshots/`
 - [x] Authentication — desktop login, validation, error, change-password (desktop + mobile) (`artifacts/lab-03/screenshots/authentication/`)
-- [ ] Staff queue — desktop table, filters, no-results, tablet, mobile cards
-- [ ] Staff ticket detail — tabs (comments / notes), operational panel, mobile layout, forbidden/not-found state
-- [ ] User management — list, create panel, edit panel, self-deactivation hint, mobile cards
+- [x] Staff queue — desktop table, filters, no-results, tablet, mobile cards (`artifacts/lab-03/screenshots/staff-queue/` — E2E-04, E2E-06)
+- [x] Staff ticket detail — tabs (comments / notes), operational panel, mobile layout, forbidden/not-found state (`artifacts/lab-03/screenshots/staff-ticket-detail/` — E2E-04, E2E-05, E2E-06, E2E-07)
+- [x] User management — list, create panel, edit panel, self-deactivation hint, mobile cards (`artifacts/lab-03/screenshots/user-management/` — E2E-09, E2E-10)
 
 ### Manual Visual Inspection
-- [ ] Zen Green theme consistent; no development banner anywhere
-- [ ] Header shows name + role badge and Logout; no "Switch Requester"
-- [ ] Header Logout visible; role-filtered navigation (Requesters never see Queue/User Management)
-- [ ] Role badge palette correct per role; status badge palette matches the 8 statuses
-- [ ] Login shows safe generic failure; inactive-account and rate-limit banners distinct
-- [ ] Change Password rule checklist updates live; submit disabled until satisfied
-- [ ] Read-only versus editable fields distinct in Ticket Detail operational panel
-- [ ] Status select lists only permitted transitions; current status badge beside it
-- [ ] Public Comments vs Internal Notes visually distinct; Internal Notes carry the "internal only" amber hint
-- [ ] Comments/Notes render pre-wrapped plain text (no HTML)
-- [ ] "Problem Appears Resolved" only when allowed; "Provide Information" only when `WAITING_FOR_REQUESTER`
-- [ ] User Management Active toggle disabled for the current Administrator
-- [ ] Loading skeletons / spinners on every async boundary; success/conflict/failure banners present
-- [ ] Queue table collapses to cards < 1024px; no horizontal scroll at 375px
-- [ ] Focus rings on all interactive elements; WCAG AA contrast; axe audit clean (UI-12)
+- [x] Zen Green theme consistent; no development banner anywhere (verified: no `DEVELOPMENT MODE`/banner markup in `client/src`)
+- [x] Header shows name + role badge and Logout; no "Switch Requester" (verified: absent from `client/src`; UI-05)
+- [x] Header Logout visible; role-filtered navigation (Requesters never see Queue/User Management) (UI-05, E2E-08)
+- [x] Role badge palette correct per role; status badge palette matches the 8 statuses (all 8 pairs contrast-checked ≥ 4.5:1, lowest 4.73)
+- [x] Login shows safe generic failure; inactive-account and rate-limit banners distinct (UI-01)
+- [x] Change Password rule checklist updates live; submit disabled until satisfied (UI-03)
+- [x] Read-only versus editable fields distinct in Ticket Detail operational panel (`--color-bg-readonly: #F9F9F7` vs `--color-bg-editable: #FFFFFF`)
+- [x] Status select lists only permitted transitions; current status badge beside it (UI-07)
+- [x] Public Comments vs Internal Notes visually distinct; Internal Notes carry the "internal only" amber hint (`#92400E` on `#FEF3C7`, 6.37:1) (UI-08)
+- [x] Comments/Notes render pre-wrapped plain text (no HTML) (verified: no `dangerouslySetInnerHTML` in `client/src`)
+- [x] "Problem Appears Resolved" only when allowed; "Provide Information" only when `WAITING_FOR_REQUESTER` (UI-09)
+- [x] User Management Active toggle disabled for the current Administrator (UI-11, E2E-09)
+- [x] Loading skeletons / spinners on every async boundary; success/conflict/failure banners present (UI-06, UI-07, UI-11)
+- [x] Queue table collapses to cards < 1024px; no horizontal scroll at 375px (asserted programmatically in E2E-06, E2E-10)
+- [x] Focus rings on all interactive elements (`:focus-visible` rules across buttons/selects/inputs/cards/toggles/dialogs); WCAG AA contrast (16 pairs spot-checked, all ≥ 4.5:1); axe audit clean (UI-12)
 
 ---
 
@@ -269,32 +269,35 @@ npm run prisma:seed:e2e                        # E2E auth fixture users (idempot
 
 ## 6. Final Results
 
-_Scope: this sprint ships authentication, password hygiene, and role-gating (FR-01…FR-07) on the authenticated foundation. The queue, staff ticket detail, user administration, and requester-regression items in §2 remain pending by design (see §7 and the sprint scope note)._
-
 ### Verified on the current branch
 
 | Suite | Command | Result |
 |-------|---------|--------|
-| Server suite (lab-01 + lab-02 + lab-03) | `cd server && npm test` | **13/13 files, 107/107 pass** (lab-01: health, categories; lab-02: seed + T-004…T-020 regression, auth-bound; lab-03: API-01…API-14, UNIT-01/02/05/06) |
-| Client suite (lab-01 + lab-02 + lab-03) | `cd client && npm test` | **10/10 files, 62/62 pass** (incl. lab-01 App auth flow; lab-02 regression; lab-03 UI-01…UI-05) |
-| E2E (lab-03 auth) | `npx playwright test` (repo root) | **4/4 pass** (E2E-01, E2E-02, E2E-03, E2E-08) |
+| Server suite (lab-01 + lab-02 + lab-03) | `cd server && npm test` | **20/20 files, 200/200 pass** (lab-01: health, categories; lab-02: seed incl. idempotency fix + T-004…T-020 regression, auth-bound; lab-03: API-01…API-43, UNIT-01…UNIT-06, MIG-01…MIG-04) |
+| Server typecheck | `cd server && npx tsc --noEmit` | **clean** |
+| Client suite (lab-01 + lab-02 + lab-03) | `cd client && npm test` | **17/17 files, 123/123 pass** (lab-01 App auth flow; lab-02 regression; lab-03 UI-01…UI-13 incl. axe audit + responsive) |
+| Client typecheck + build | `cd client && npm run build` | **clean** (`tsc && vite build`) |
+| E2E (lab-03, all roles) | `npx playwright test` (repo root) | **11/11 pass** (E2E-01…E2E-11 across `authentication`, `staff-ticket-flow`, `user-administration`, `requester-regression` specs) |
 
 ### Result summary
 
 | Type | Total | Pass | Fail | Pending |
 |------|-------|------|------|---------|
-| Unit (lab-03) | 6 | 4 | 0 | 2 |
-| API (lab-03) | 43 | 14 | 0 | 29 |
-| MIG | 4 | 0 | 0 | 4 |
-| UI | 13 | 5 | 0 | 8 |
-| E2E | 11 | 4 | 0 | 7 |
-| **Total** | **77** | **27** | **0** | **50** |
+| Unit (lab-03) | 6 | 6 | 0 | 0 |
+| API (lab-03) | 43 | 43 | 0 | 0 |
+| MIG | 4 | 4 | 0 | 0 |
+| UI | 13 | 13 | 0 | 0 |
+| E2E | 11 | 11 | 0 | 0 |
+| **Total** | **77** | **77** | **0** | **0** |
 
 ### Notes
-- The "Pending" rows (staff queue, staff ticket detail, comments/notes, user administration, requester regression, MIG) map to server handlers that remain stubbed/deferred under the strict-scope decision; their API/UI/E2E files are specified in §2 and will run once those handlers are migrated.
-- The full server and client suites are green: the Lab 1/2 tests were rewritten for the Lab 3 data model — the ticket submitter/owner comes from the session (`submittedById`/`ownerId`), payloads no longer carry `requesterId`, and cross-owner access is asserted as 404 (D-03). Tests for the removed `GET /api/requesters` endpoint and Requester selector were deleted.
+- No test is skipped, disabled, or commented out (verified by scan: no `.skip`/`xit`/`xdescribe` in any suite).
+- The seed-idempotency test (`T-022`) was rewritten during this sprint: the old version compared global reference-table counts, which raced with sibling suites' `beforeAll` fixtures on the shared database; it now uses name-scoped upsert counts and passes deterministically.
+- UI-12 added two genuine component fixes: the custom `Select` combobox now exposes an accessible name, and the staff comment/note thread lists keep `role="log"` on a wrapper so `<li>` elements stay inside a real list.
+- Screenshots follow `ui-spec.md` §12 exactly (`authentication/` 6 + `staff-queue/` 5 + `staff-ticket-detail/` 5 + `user-management/` 5 canonical files, plus workflow extras); E2E fixture scripts reset their working rows before and after each spec so suites are re-runnable.
 - Server API tests that drive ticket/attachment flows create dedicated active users (`mustChangePassword = false`) in `beforeAll`, log in via Supertest agents, and clean them up in `afterAll` (shared helper in `server/tests/helpers/testAuth.ts`).
 - E2E runs against a dedicated Vite client port `:5174` (configurable via `playwright.config.ts`) so another project's dev server on `:5173` cannot be picked up by `reuseExistingServer`.
+- E2E-07 note: the app uses view-state navigation (no URL router), so a literal deep "Ticket URL" cannot exist; the test covers requester UI confinement plus same-session direct API calls (404 `TICKET_NOT_FOUND` for another user's ticket, 403 for admin endpoints).
 
 ---
 
