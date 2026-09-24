@@ -10,6 +10,7 @@ import { MyTickets } from "../features/MyTickets.js";
 import { StaffTicketQueue } from "../features/StaffTicketQueue.js";
 import { StaffTicketDetail } from "../features/StaffTicketDetail.js";
 import { TicketDetail } from "../features/TicketDetail.js";
+import { UserList } from "../features/UserList.js";
 
 type ShellView =
   | "my-tickets"
@@ -30,20 +31,6 @@ const NAV_ITEMS_BY_ROLE: Record<UserRole, { id: ShellView; label: string }[]> = 
     { id: "users", label: "User Management" },
   ],
 };
-
-function DeferredPanel({ title }: { title: string }) {
-  return (
-    <Card>
-      <div className="state">
-        <h3 className="state__title">{title}</h3>
-        <p className="state__message">
-          This screen is under construction and will be available in a later
-          release.
-        </p>
-      </div>
-    </Card>
-  );
-}
 
 function ShellContent() {
   const { user, logout } = useAuth();
@@ -130,7 +117,7 @@ function ShellContent() {
             onBack={() => navigate("queue")}
           />
         ) : activeView === "users" ? (
-          <DeferredPanel title="User Management" />
+          <UserList />
         ) : activeView === "create-ticket" ? (
           <div className="create-ticket-page">
             <h1 className="screen-title">Create Ticket</h1>

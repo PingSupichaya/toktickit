@@ -18,17 +18,28 @@ export interface AuthResult {
 export class ApiError extends Error {
   status: number;
   code?: string;
+  details?: Record<string, string>;
 
-  constructor(status: number, message: string, code?: string) {
+  constructor(
+    status: number,
+    message: string,
+    code?: string,
+    details?: Record<string, string>
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
 interface ErrorBody {
-  error?: { message?: string; code?: string };
+  error?: {
+    message?: string;
+    code?: string;
+    details?: Record<string, string>;
+  };
 }
 
 export interface Category {
@@ -537,7 +548,8 @@ async function authJson<T>(
     throw new ApiError(
       res.status,
       error?.message ?? `Request failed with status ${res.status}`,
-      error?.code
+      error?.code,
+      error?.details
     );
   }
 
@@ -692,5 +704,85 @@ export async function postNote(
   return authJson<PublicComment>(`/api/tickets/${ticketId}/notes`, {
     method: "POST",
     body: JSON.stringify({ content }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Lab 3 — Administrator User Management (FR-21..FR-25 / §4.18..§4.21).
+// ---------------------------------------------------------------------------
+
+// Row shape of every user-management response (§3): mustChangePassword and
+// createdAt are exposed; passwordHash and credential-tracking fields are not.
+export interface AdminUser {
+  id: number;
+  name: string;
+  email: string;
+  role: UserRole;
+  isActive: boolean;
+  mustChangePassword: boolean;
+  createdAt: string;
+}
+
+export interface UserQuery {
+  search?: string;
+  role?: UserRole;
+}
+
+export interface CreateUserInput {
+  name: string;
+  email: string;
+  role: UserRole;
+  isActive?: boolean;
+  initialPassword: string;
+}
+
+export interface UpdateUserInput {
+  name?: string;
+  email?: string;
+  role?: UserRole;
+  isActive?: boolean;
+}
+
+// FR-21 — list users with case-insensitive name/email search and a single
+// role filter. No pagination (Excluded Scope). ADMIN-only; throws ApiError.
+export async function fetchUsers(query: UserQuery = {}): Promise<AdminUser[]> {
+  const params = new URLSearchParams();
+  if (query.search) params.set("search", query.search);
+  if (query.role) params.set("role", query.role);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return authJson<AdminUser[]>(`/api/users${suffix}`);
+}
+
+// FR-22 / BR-29, BR-10 — create a user with an initial password that must be
+// changed at first sign-in (mustChangePassword=true is set by the server).
+export async function createUser(input: CreateUserInput): Promise<AdminUser> {
+  return authJson<AdminUser>("/api/users", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+// FR-23 / FR-24 / BR-31, BR-32 — update name/email/role/isActive. The server
+// rejects self-deactivation (CANNOT_DEACTIVATE_SELF) and leaving zero active
+// Administrators (LAST_ACTIVE_ADMIN).
+export async function updateUser(
+  userId: number,
+  input: UpdateUserInput
+): Promise<AdminUser> {
+  return authJson<AdminUser>(`/api/users/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+// FR-25 / BR-34 — set a new initial password that forces a change at the next
+// sign-in.
+export async function resetUserInitialPassword(
+  userId: number,
+  newPassword: string
+): Promise<AdminUser> {
+  return authJson<AdminUser>(`/api/users/${userId}/reset-initial-password`, {
+    method: "POST",
+    body: JSON.stringify({ newPassword }),
   });
 }
