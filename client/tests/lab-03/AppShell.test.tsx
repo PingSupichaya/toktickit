@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import * as api from "../../src/api.js";
 import App from "../../src/App.js";
 
@@ -73,5 +74,39 @@ describe("AppShell role-based navigation (UI-05)", () => {
     expect(within(nav).queryByText("My Tickets")).not.toBeInTheDocument();
     expect(within(nav).queryByText("Create Ticket")).not.toBeInTheDocument();
     expect(screen.getByTestId("role-badge")).toHaveAttribute("data-value", "ADMIN");
+  });
+});
+
+describe("AppShell mobile navigation overlay (ui-spec §4)", () => {
+  it("opens the overlay from the hamburger and navigates on link tap", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.fetchMe).mockResolvedValue({
+      user: trainedUser("ADMIN", { name: "Carol Admin" }),
+      mustChangePassword: false,
+    });
+    vi.mocked(api.fetchUsers).mockResolvedValue([]);
+    render(<App />);
+    await screen.findByTestId("logout-btn");
+
+    // The overlay starts closed.
+    expect(
+      screen.queryByRole("dialog", { name: "Navigation menu" })
+    ).not.toBeInTheDocument();
+
+    // The hamburger opens it with the role-filtered links stacked.
+    await user.click(screen.getByTestId("menu-btn"));
+    const overlay = await screen.findByRole("dialog", {
+      name: "Navigation menu",
+    });
+    expect(within(overlay).getByText("Ticket Queue")).toBeInTheDocument();
+    expect(within(overlay).getByText("User Management")).toBeInTheDocument();
+    expect(within(overlay).queryByText("My Tickets")).not.toBeInTheDocument();
+
+    // Tapping a link navigates and closes the overlay.
+    await user.click(within(overlay).getByText("User Management"));
+    expect(await screen.findByTestId("user-search-input")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "Navigation menu" })
+    ).not.toBeInTheDocument();
   });
 });

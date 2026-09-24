@@ -100,6 +100,20 @@ function ShellContent() {
           <Button variant="ghost" className="app-header__logout" data-testid="logout-btn" onClick={() => logout()}>
             Logout
           </Button>
+          {/* Mobile (< 768px): the inline nav is hidden, so this opens the
+              full-screen navigation overlay (ui-spec §4). */}
+          <button
+            type="button"
+            className="app-header__hamburger"
+            aria-label="Open menu"
+            aria-expanded={menuOpen}
+            data-testid="menu-btn"
+            onClick={() => setMenuOpen(true)}
+          >
+            <span aria-hidden="true" />
+            <span aria-hidden="true" />
+            <span aria-hidden="true" />
+          </button>
         </div>
       </header>
 
