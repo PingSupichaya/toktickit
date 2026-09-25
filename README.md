@@ -6,10 +6,10 @@ IT Service Desk app with a React client and an Express + PostgreSQL (Prisma) ser
 
 - `client/` — React + Vite frontend (unit/component tests in `client/tests/`)
 - `server/` — Express API + Prisma/PostgreSQL (API tests in `server/tests/`)
-- `e2e/` — Playwright end-to-end tests, organized by lab (`e2e/lab-02/`)
+- `e2e/` — Playwright end-to-end tests, organized by lab (`e2e/lab-02/` legacy, `e2e/lab-03/` current)
 - `docs/` — lab documentation (specifications, API/UI specs, evidence reviews)
 - `artifacts/` — test evidence, e.g. E2E screenshots
-- `playwright.config.ts` — root Playwright config (starts client + API, points at `e2e/`)
+- `playwright.config.ts` — root Playwright config (starts API on :3000 + client on :5174, `testDir: e2e/lab-03`)
 
 ## Prerequisites
 
@@ -85,44 +85,46 @@ npm test
 
 ### End-to-end tests (Playwright)
 
-The E2E suite runs the full user workflow in a real (headless) Chromium browser and saves screenshots to `artifacts/lab-02/screenshots/` as evidence. The Playwright config lives at the repository root.
+The Lab 3 E2E suite drives the full multi-role workflow in a real (headless) Chromium browser and saves screenshots to `artifacts/lab-03/screenshots/` as evidence (exact file paths in `docs/lab-03/ui-spec.md` §12). The Playwright config lives at the repository root (`testDir: e2e/lab-03`).
 
 **Prerequisites**
-- Docker Desktop is running and the `toktickit-postgres` container is up (see "PostgreSQL via Docker" above).
-- The API server is reachable on port 3000. `playwright.config.ts` starts the client automatically; it will reuse an already-running API if present, otherwise you must start one:
+- Docker Desktop is running and the `toktickit-postgres` container is up (see "PostgreSQL via Docker" above). Playwright starts only the Node processes — never the database — so every E2E test fails if Postgres is down.
+- Database migrated and seeded (each spec resets its own fixtures on top, but the base seed must exist):
   ```bash
   cd server
-  npm run dev
+  npx prisma migrate dev
+  npm run prisma:seed
+  npm run prisma:seed:e2e
   ```
+- Ports **3000** (API) and **5174** (E2E client) are free. `playwright.config.ts` starts both servers automatically and silently reuses already-running ones — stop any stale dev server from another session first.
+- First time only (from the repository root): `npm install` plus `npx playwright install chromium`.
 
 **Run the E2E tests** (from the repository root):
 
 ```bash
-# First time only: install Playwright + the Chromium browser
-npm install
-npx playwright install chromium
-
-# Run the Lab 2 E2E suite (testDir is already e2e/lab-02, so no path argument needed)
+# Lab 3 suite (11 tests, serial — no path argument needed)
 npx playwright test
 ```
 
 Useful options:
 
 ```bash
+npx playwright test e2e/lab-03/authentication.spec.ts   # one spec file
 npx playwright test --headed      # Watch the browser while it runs
 npx playwright test --reporter=html   # Open an HTML report after running
 ```
 
 The same commands are also available as npm scripts from the repo root: `npm run test:e2e`, `npm run test:e2e:headed`, and `npm run test:e2e:report`.
 
-**What it verifies** — `e2e/lab-02/requester-ticket-flow.spec.ts` (5 tests, serial):
-1. Select a requester → create a ticket (validation, submitting, success states) at desktop/tablet/mobile.
-2. My Tickets: responsive layout, search results, and empty/no-results states.
-3. Ticket detail + attachment lifecycle: upload, remove-confirmation modal, muted removed row.
-4. Ownership block: another requester gets a 403 error screen.
-5. Visual checks: Zen Green theme, focus rings, hamburger menu, 2→1 column grid collapse.
+**What it verifies** (serial, one worker):
+- `e2e/lab-03/authentication.spec.ts` — E2E-01/02/03/08: valid/invalid login → shell, safe error banner, logout; first-login password change gate; inactive account; role-based navigation.
+- `e2e/lab-03/staff-ticket-flow.spec.ts` — E2E-04/05/06/07: queue search/filter → claim → IT Priority → status change → Public Comment → Internal Note; comment/note visibility + resolution indicator; responsive queue/detail; authorization from the browser.
+- `e2e/lab-03/user-administration.spec.ts` — E2E-09/10: admin creates a user → first login forces change; edit/deactivate/reset-password; list search/filter; panel + mobile screenshots.
+- `e2e/lab-03/requester-regression.spec.ts` — E2E-11: authenticated requester creates a ticket, manages an attachment, posts a comment (Lab 2 selector is gone).
 
-After running, confirm the screenshots were written to `artifacts/lab-02/screenshots/`.
+After running, confirm the screenshots were written to `artifacts/lab-03/screenshots/` (`authentication/`, `staff-queue/`, `staff-ticket-detail/`, `user-management/`).
+
+> Note: `e2e/lab-02/` is the legacy Lab 2 suite (localStorage requester selector, 403 ownership block). It is not run by `npx playwright test` and does not pass against the Lab 3 app (authenticated identity, 404 cross-owner rule); requester regression now lives in E2E-11.
 
 ### Manual verification
 
@@ -196,7 +198,10 @@ Use these steps to confirm each feature end to end. Do them in order — each on
    | PowerShell | `Invoke-RestMethod http://localhost:3000/api/categories` |
    | Command Prompt / bash | `curl http://localhost:3000/api/categories` |
 
-   Expect: a JSON array of 4 objects with `id` and `name`, in this order — Account and Access, Hardware, Software, Network.
+    Expect: `401` with an error body — since Lab 3, reference endpoints require
+    a session (API-11), so this unauthenticated call is rejected. (With a valid
+    session cookie, the same endpoint returns `{ "data": [ { "id": 1, "name":
+    "Account and Access" }, ... ] }` — 4 objects in id order.)
 
    **If this fails but health check succeeded:** the server can't reach the database. Check the checklist above (Docker container running?), then check the server terminal for a `PrismaClientInitializationError` or `Can't reach database server` message.
 

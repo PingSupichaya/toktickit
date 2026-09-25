@@ -168,7 +168,7 @@ test("E2E-09 full user-administration workflow", async ({ page }) => {
   await expect(
     page.getByText("You cannot deactivate your own account.")
   ).toBeVisible();
-  await shot(page, "edit-own-account-disabled.png");
+  await shot(page, "desktop-self-deactivation-disabled.png");
   await page.locator('[data-testid="side-panel-close"]').click();
 
   // --- AC-16: create a user with one role + initial password. --------------
@@ -271,7 +271,7 @@ test("E2E-10 user list interactions and screenshots", async ({ page }) => {
   await openUserManagement(page);
   await expect(userRow(page, ADMIN.email)).toBeVisible();
   await expect(userRow(page, "priya.nai@mail.kmutt.ac.th")).toBeVisible();
-  await shot(page, "user-management-list-desktop.png");
+  await shot(page, "desktop-users-list.png");
 
   // Search by a name fragment (debounced).
   await page.locator('[data-testid="user-search-input"]').fill("priya");
@@ -297,12 +297,12 @@ test("E2E-10 user list interactions and screenshots", async ({ page }) => {
   // Create panel screenshot.
   await page.locator('[data-testid="create-user-btn"]').click();
   await expect(page.getByRole("dialog", { name: "Create User" })).toBeVisible();
-  await shot(page, "create-panel-desktop.png");
+  await shot(page, "desktop-create-user-panel.png");
   await page.locator('[data-testid="side-panel-close"]').click();
 
   // Edit panel screenshot.
   await openEdit(page, "priya.nai@mail.kmutt.ac.th");
-  await shot(page, "edit-panel-desktop.png");
+  await shot(page, "desktop-edit-user-panel.png");
   await page.locator('[data-testid="side-panel-close"]').click();
 
   // Mobile: card list replaces the table.
@@ -310,7 +310,7 @@ test("E2E-10 user list interactions and screenshots", async ({ page }) => {
   await expect(page.locator('[data-testid="user-card"]')).toBeVisible();
   const cards = page.locator(".user-card");
   await expect(cards.first()).toBeVisible();
-  await shot(page, "user-management-mobile.png");
+  await shot(page, "mobile-users.png");
 
   expect(errs).toEqual([]);
 });

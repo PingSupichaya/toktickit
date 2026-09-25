@@ -561,11 +561,13 @@ export function StaffTicketDetail({
               {commentsNewestFirst.length === 0 ? (
                 <p className="comments-empty">No comments yet.</p>
               ) : (
-                <ul className="thread-list" role="log" aria-live="polite">
-                  {commentsNewestFirst.map((comment) => (
-                    <ThreadItem key={comment.id} item={comment} />
-                  ))}
-                </ul>
+                <div role="log" aria-live="polite">
+                  <ul className="thread-list">
+                    {commentsNewestFirst.map((comment) => (
+                      <ThreadItem key={comment.id} item={comment} />
+                    ))}
+                  </ul>
+                </div>
               )}
               <div className="comments-composer">
                 <Textarea
@@ -610,11 +612,13 @@ export function StaffTicketDetail({
               {notesNewestFirst.length === 0 ? (
                 <p className="comments-empty">No notes yet.</p>
               ) : (
-                <ul className="thread-list thread-list--notes" role="log" aria-live="polite">
-                  {notesNewestFirst.map((note) => (
-                    <ThreadItem key={note.id} item={note} marker="Internal" />
-                  ))}
-                </ul>
+                <div role="log" aria-live="polite">
+                  <ul className="thread-list thread-list--notes">
+                    {notesNewestFirst.map((note) => (
+                      <ThreadItem key={note.id} item={note} marker="Internal" />
+                    ))}
+                  </ul>
+                </div>
               )}
               <div className="comments-composer">
                 <Textarea
