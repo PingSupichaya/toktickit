@@ -2,7 +2,7 @@
   "name": "toktickit",
   "private": true,
   "version": "1.0.0",
-  "description": "TokTickIT - Lab 2 ticketing system (E2E test runner at repo root)",
+  "description": "TokTickIT - Lab 3 ticketing system (E2E test runner at repo root)",
   "scripts": {
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",

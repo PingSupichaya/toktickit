@@ -7,10 +7,13 @@ import App from "../../src/App.js";
 
 vi.mock("../../src/api.js");
 
-const activeRequesters = [
-  { id: 1, name: "Alice Johnson", email: "alice@example.com" },
-  { id: 2, name: "Bob Smith", email: "bob@example.com" },
-];
+const alice: api.AuthUser = {
+  id: 1,
+  name: "Alice Johnson",
+  email: "alice@example.com",
+  role: "REQUESTER",
+  isActive: true,
+};
 
 const categories = [
   { id: 1, name: "Account and Access" },
@@ -29,8 +32,8 @@ const relatedSystems = [
 const createdTicket: Ticket = {
   id: 1,
   ticketNumber: "TKT-000001",
-  requesterId: 1,
-  requester: { id: 1, name: "Alice Johnson", email: "alice@example.com" },
+  submittedById: 1,
+  submitter: { id: 1, name: "Alice Johnson", email: "alice@example.com" },
   categoryId: 2,
   category: { id: 2, name: "Hardware" },
   relatedSystemId: 2,
@@ -56,8 +59,8 @@ const uploadedAttachment = {
 };
 
 beforeEach(() => {
-  localStorage.clear();
-  vi.mocked(api.fetchRequesters).mockResolvedValue(activeRequesters);
+  vi.clearAllMocks();
+  vi.mocked(api.fetchMe).mockResolvedValue({ user: alice, mustChangePassword: false });
   vi.mocked(api.fetchCategories).mockResolvedValue(categories);
   vi.mocked(api.fetchRelatedSystems).mockResolvedValue(relatedSystems);
   vi.mocked(api.createTicket).mockResolvedValue(createdTicket);
@@ -78,10 +81,6 @@ beforeEach(() => {
 const user = userEvent.setup();
 
 async function openCreateTicket() {
-  localStorage.setItem(
-    "toktickit.requester",
-    JSON.stringify({ id: 1, name: "Alice Johnson", email: "alice@example.com" })
-  );
   render(<App />);
   await waitFor(() => {
     expect(document.querySelector(".app-header__user-name")?.textContent).toBe(
@@ -339,7 +338,7 @@ describe("CreateTicket (T-009 / T-010)", () => {
     await user.click(retry);
 
     expect(await screen.findByText("Uploaded")).toBeInTheDocument();
-    expect(api.uploadAttachment).toHaveBeenCalledWith(1, 1, png);
+    expect(api.uploadAttachment).toHaveBeenCalledWith(1, png);
     expect(api.uploadAttachment).toHaveBeenCalledTimes(2);
 
     // While the success banner is up, picking files for a NEW ticket is blocked.

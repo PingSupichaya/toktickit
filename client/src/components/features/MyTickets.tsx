@@ -17,7 +17,16 @@ import { TicketCard } from "./TicketCard.js";
 import { TicketCardSkeleton } from "./TicketCardSkeleton.js";
 import { Pagination } from "./Pagination.js";
 
-const STATUS_CHOICES = ["NEW"] as const;
+const STATUS_CHOICES = [
+  "NEW",
+  "OPEN",
+  "IN_PROGRESS",
+  "WAITING_FOR_REQUESTER",
+  "RESOLVED",
+  "CLOSED",
+  "REOPENED",
+  "CANCELLED",
+] as const;
 
 const SORT_CHOICES = [
   { value: "date-desc", label: "Newest first" },
@@ -129,7 +138,6 @@ export function MyTickets({ onCreateTicket, onOpenTicket }: MyTicketsProps) {
 
     let cancelled = false;
     fetchTickets({
-      requesterId: requester.id,
       search: debouncedSearch || undefined,
       categoryId: filters.categoryId === "" ? undefined : Number(filters.categoryId),
       relatedSystemId:

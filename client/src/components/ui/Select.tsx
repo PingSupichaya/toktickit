@@ -2,6 +2,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type ReactNode,
   KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 
@@ -11,7 +12,8 @@ interface Option<T> {
 }
 
 interface SelectProps<T extends string | number> {
-  label: string;
+  label: ReactNode;
+  labelText?: string;
   required?: boolean;
   error?: string;
   disabled?: boolean;
@@ -26,6 +28,7 @@ interface SelectProps<T extends string | number> {
 
 export function Select<T extends string | number>({
   label,
+  labelText,
   required = false,
   error,
   disabled = false,
@@ -40,9 +43,19 @@ export function Select<T extends string | number>({
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(-1);
   const rootRef = useRef<HTMLDivElement>(null);
-  const fieldId = id ?? `select-${label.replace(/\s+/g, "-").toLowerCase()}`;
+  const fieldId =
+    id ??
+    `select-${(labelText ?? (typeof label === "string" ? label : "select")).replace(
+      /\s+/g,
+      "-"
+    ).toLowerCase()}`;
 
   const selected = options.find((o) => o.value === value);
+
+  // Accessible name for the combobox and its listbox (axe UI-12: a
+  // role="combobox" must have an accessible name).
+  const accessibleName =
+    labelText ?? (typeof label === "string" ? label : "Select");
 
   useEffect(() => {
     if (!open) return;
@@ -114,6 +127,7 @@ export function Select<T extends string | number>({
       <div
         className="select-control__wrap"
         role="combobox"
+        aria-label={accessibleName}
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-controls={`${fieldId}-listbox`}
@@ -154,7 +168,7 @@ export function Select<T extends string | number>({
             className="select-control__menu"
             id={`${fieldId}-listbox`}
             role="listbox"
-            aria-label={label}
+            aria-label={accessibleName}
           >
             {options.map((opt, i) => {
               const isSelected = opt.value === value;

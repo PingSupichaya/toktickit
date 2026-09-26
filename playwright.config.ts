@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
-  testDir: "./e2e/lab-02",
+  testDir: "./e2e/lab-03",
   testMatch: "**/*.spec.ts",
   timeout: 90_000,
   fullyParallel: false,
@@ -9,7 +9,7 @@ export default defineConfig({
   reporter: [["list"]],
   expect: { timeout: 10_000 },
   use: {
-    baseURL: "http://localhost:5173",
+    baseURL: "http://localhost:5174",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
@@ -22,9 +22,9 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
-      command: "npm run dev",
+      command: "npm run dev -- --port 5174 --strictPort",
       cwd: "./client",
-      url: "http://localhost:5173",
+      url: "http://localhost:5174",
       reuseExistingServer: true,
       timeout: 60_000,
     },
