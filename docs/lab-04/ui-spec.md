@@ -52,7 +52,7 @@ Full width, max-width 1280px, consistent with the Ticket Queue container.
 3. **Priority breakdown strip** (`data-testid="staff-priority-breakdown"`), directly beneath the metric card row: a single compact row of three inline counts — "Low: N", "Medium: N", "High: N" — over active (non-terminal-status) Tickets. Each count is a link that drills into the Ticket Queue pre-filtered by that `itPriority`. Rendered smaller and visually subordinate to the primary card row (13px labels) so it reads as a secondary detail, not a duplicate set of cards (specification.md D-08).
 4. **Two-column content row** (stacks to one column < 1024px):
    - **Left — "My Recent Tickets"** (`data-testid="staff-recent-tickets"`): list of the current user's 5 most recently updated owned Tickets — ticket number (semibold, link to Ticket Detail), status badge, relative/short date. "View all" link (top-right of the card) → Ticket Queue filtered to `assignment=assignedToMe`.
-   - **Right — "Quick Actions"** (`data-testid="staff-quick-actions"`): 3 icon-buttons — **Create Ticket**, **Search Tickets** (→ Ticket Queue with search focused), **My Queue** (→ Ticket Queue filtered to `assignment=assignedToMe`).
+   - **Right — "Quick Actions"** (`data-testid="staff-quick-actions"`): 3 icon-buttons — **Browse Unassigned** (→ Ticket Queue filtered to `assignment=unassigned`), **Search Tickets** (→ Ticket Queue with search focused), **My Queue** (→ Ticket Queue filtered to `assignment=assignedToMe`). No Create Ticket button for Staff (see specification.md D-11 — `POST /api/tickets` remains `REQUESTER only` per Lab 3).
 
 ### States
 
