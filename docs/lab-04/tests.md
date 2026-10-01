@@ -49,7 +49,7 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 | Test ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
 | API-01 | API | AC-01 / BR-03, BR-06 | Create a valid Action Taken | 201; correct `ticketId`, supplied `actionAt` stored, `performedById` = actor, `createdAt` server-set, `version = 1` | Planned |
-| API-02 | API | BR-04 | Follow-up Note required iff Follow-Up Required | `followUpRequired=true` + empty note → 400; `followUpRequired=false` + non-empty note → 400; valid combinations → 201 | Planned |
+| API-02 | API | BR-04 | Follow-up Note required when toggle is on, auto-cleared when off | `followUpRequired=true` + empty note → 400 `FOLLOW_UP_NOTE_REQUIRED`; `followUpRequired=false` + non-empty note → 201 with `followUpNote: null` (auto-clear, never 400) | Planned |
 | API-03 | API | AC-01 / BR-03 | Description/Result boundaries | 1–2000 chars accepted; empty/whitespace-only rejected (400) | Planned |
 | API-04 | API | BR-05 | Attachment Notes boundary and optionality | 0–500 chars accepted; omitted → stored as null; no Attachment record is created or referenced | Planned |
 | API-05 | API | AC-09 / BR-02 | Requester cannot create | Requester → 403; no record created | Planned |
@@ -61,15 +61,15 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 | API-11 | API | BR-06, BR-07 | Edit preserves immutable fields | `performedById` and `createdAt` unchanged after edit; `actionAt` editable with revalidation; `updatedById`/`updatedAt` set to the editor | Planned |
 | API-12 | API | AC-07 / BR-12 | Stale-write rejected on edit | Submitting an outdated `version` → 409 `STALE_UPDATE` with current record in `details`; correct `version` → 200, `version` incremented | Planned |
 | API-13 | API | BR-04 | Edit re-validates follow-up conditional | Editing to `followUpRequired=true` without a note → 400, even if the record previously had `followUpRequired=false` | Planned |
-| API-37 | API | AC-13 / BR-06 | `actionAt` future rejected, past accepted | Future `actionAt` (>60s ahead) → 400 `ACTION_AT_IN_FUTURE`; past `actionAt` → 201 and stored verbatim | Planned |
+| API-37 | API | AC-13 / BR-06 | `actionAt` future rejected, past accepted | Future `actionAt` (>5 min / 300s ahead) → 400 `ACTION_AT_IN_FUTURE`; within +5 min or past → 201 and stored verbatim | Planned |
 | API-38 | API | AC-04, AC-05 / BR-10 | Gate keys off latest `actionAt` | Backdated action inserted after a newer one does not become the gate reference; latest by `actionAt` (tie highest `id`) decides | Planned |
 
 ### 2.2 Ticket Workflow and Resolution — `server/tests/lab-04/ticket-workflow.api.test.ts`
 
 | Test ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
-| API-14 | API | AC-03 / BR-10 | Resolve with zero Actions Taken | 409 `RESOLUTION_NOT_ALLOWED`; status unchanged | Planned |
-| API-15 | API | AC-04 / BR-10 | Resolve with outstanding follow-up on latest action | Latest Action Taken has `followUpRequired=true` → 409 `RESOLUTION_NOT_ALLOWED` | Planned |
+| API-14 | API | AC-03 / BR-10 | Resolve with zero Actions Taken | 422 `RESOLUTION_NOT_ALLOWED`; status unchanged | Planned |
+| API-15 | API | AC-04 / BR-10 | Resolve with outstanding follow-up on latest action | Latest Action Taken has `followUpRequired=true` → 422 `RESOLUTION_NOT_ALLOWED` | Planned |
 | API-16 | API | AC-05 / BR-10 | Resolve when gate satisfied | ≥1 Action Taken, latest has `followUpRequired=false` → 200, status = RESOLVED | Planned |
 | API-17 | API | BR-10 | Gate looks only at the most recent action | Ticket has an earlier action with `followUpRequired=true` followed by a later action with `followUpRequired=false` → resolution succeeds | Planned |
 | API-18 | API | FR-06 / §7 matrix | Full transition matrix — permitted moves | Every positive transition in `specification.md` §7 persists | Planned |
@@ -109,9 +109,9 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 |---|---|---|---|---|---|
 | UNIT-01 | Unit | BR-10 | Resolution-gate evaluator | `(actionCount, latestByActionAtFollowUpRequired) → allowed/denied` for all 4 input combinations | Planned |
 | UNIT-02 | Unit | BR-12 | Optimistic-concurrency comparator | Matching version → proceed; mismatched → reject, no side effects | Planned |
-| UNIT-03 | Unit | BR-04 | Follow-up conditional validator | All 4 `(followUpRequired, note-present)` combinations return the correct pass/fail | Planned |
+| UNIT-03 | Unit | BR-04 | Follow-up conditional validator | `true` + empty → fail; `true` + note → pass; `false` ± note → pass with note normalized to `null` | Planned |
 | UNIT-04 | Unit | BR-14, BR-15 | Dashboard metric query builders | Given a mocked ticket set, each metric function returns the mathematically correct count (including `userCounts` per role) | Planned |
-| UNIT-05 | Unit | BR-06 | `actionAt` validator | Future beyond tolerance → reject; past/now → accept; invalid ISO → reject | Planned |
+| UNIT-05 | Unit | BR-06 | `actionAt` validator | Future beyond +5 min → reject; within tolerance/past/now → accept; invalid ISO → reject | Planned |
 
 ### 2.6 UI Component Tests — `client/tests/lab-04/`
 
