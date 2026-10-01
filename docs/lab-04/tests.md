@@ -101,6 +101,7 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 | API-34 | API | FR-11 / BR-15 | Administrator sees queue metrics plus userCounts | ADMIN receives 200 with identical queue metrics plus `userCounts` matching hand-computed active-user counts; `IT_STAFF` response omits `userCounts` entirely (D-07) | Planned |
 | API-35 | API | FR-12 / safe failure | Safe 500 shape on dashboard/actions endpoints | Forced server error → 500 with `{ error: { message, code: INTERNAL_SERVER_ERROR } }`, no stack/technical detail leaked | Planned |
 | API-36 | API | FR-11 / BR-15 | `userCounts` counts active users only | Inactive users excluded from all three sub-counts; verified against seeded active/inactive mix | Planned |
+| API-39 | API | BR-02 / §5 Auth matrix | Inactive Staff denied on Lab 4 endpoints | Inactive `IT_STAFF` calling actions/dashboard endpoints → `403 ACCOUNT_INACTIVE` via global session guard; no record created | Planned |
 
 ### 2.5 Unit Tests — `server/tests/lab-04/`
 
@@ -126,6 +127,7 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 | UI-07 | UI | AC-02, AC-11 / FR-10 | Requester Dashboard rendering | Metric cards render correct counts; zero-metrics show `0` not empty; recent-Tickets empty state renders correctly | `client/tests/lab-04/RequesterDashboard.test.tsx` |
 | UI-08 | UI | AC-10 / FR-11 | Staff Dashboard rendering | Same coverage as UI-07 for the Staff Dashboard, plus the Unassigned card and the Low/Medium/High priority breakdown strip; drill-down links (including each priority segment) carry the correct filter query params; ADMIN viewer additionally renders the `staff-user-counts` strip, IT_STAFF viewer omits it | `client/tests/lab-04/StaffDashboard.test.tsx` |
 | UI-09 | UI | FR-13 | Dashboard loading/failure states | Skeletons on load; safe error banner + Retry on failure | `client/tests/lab-04/StaffDashboard.test.tsx` |
+| UI-11 | UI | §8 Responsive + §10 A11y | Automated axe audit for Lab 4 screens | Dashboards + Actions Taken list/form render with zero axe violations (contrast stays manual per `axeAudit.ts` jsdom limitation) | `client/tests/lab-04/A11yLab04.test.tsx` |
 
 ### 2.7 End-to-End Tests (Playwright) — `e2e/lab-04/`
 
@@ -183,7 +185,7 @@ Verified by manual inspection and Playwright screenshot capture, per `ui-spec.md
 
 ### Playwright Screenshots Required — `artifacts/lab-04/screenshots/`
 - [ ] Staff Dashboard — desktop, empty state, tablet, mobile
-- [ ] Requester Dashboard — desktop, empty state, mobile
+- [ ] Requester Dashboard — desktop, empty state, tablet, mobile
 - [ ] Actions Taken — list, create form, follow-up-required state, resolution-blocked hint, stale-conflict banner, mobile, Requester read-only view
 
 ### Manual Visual Inspection
@@ -232,12 +234,12 @@ _Filled in on the final `main` branch before submission._
 | Type | Total | Pass | Fail | Pending |
 |---|---|---|---|---|
 | Unit | 5 | 0 | 0 | 5 |
-| API | 38 | 0 | 0 | 38 |
+| API | 39 | 0 | 0 | 39 |
 | MIG | 5 | 0 | 0 | 5 |
-| UI | 10 | 0 | 0 | 10 |
+| UI | 11 | 0 | 0 | 11 |
 | E2E | 6 | 0 | 0 | 6 |
 | PERF | 1 | 0 | 0 | 1 |
-| **Total** | **65** | **0** | **0** | **65** |
+| **Total** | **67** | **0** | **0** | **67** |
 
 ---
 

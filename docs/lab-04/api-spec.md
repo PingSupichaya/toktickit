@@ -105,6 +105,7 @@ Create an Action Taken on a Ticket.
 - `400 VALIDATION_ERROR` — field violations (`details` keyed by field, including `FOLLOW_UP_NOTE_REQUIRED` / `FOLLOW_UP_NOTE_NOT_ALLOWED` / `ACTION_AT_IN_FUTURE`).
 - `401 UNAUTHORIZED`.
 - `403 FORBIDDEN` — Requester attempting to create (BR-02, AC-09).
+- `403 ACCOUNT_INACTIVE` — inactive user on any authenticated endpoint (global session guard).
 - `404 NOT_FOUND` — Ticket does not exist.
 - `500 INTERNAL_SERVER_ERROR`.
 
@@ -170,7 +171,7 @@ Edit an existing Action Taken. Optimistic-concurrency protected.
 
 Update Ticket operational fields. Behavior unchanged from Lab 3 except: (a) `version` is now required, (b) transitioning to `RESOLVED` is gated by BR-10.
 
-**Access:** `IT_STAFF` / `ADMIN` only.
+**Access:** `IT_STAFF` / `ADMIN` only. Requesters never call this endpoint — the sole Requester status write remains `POST /api/tickets/:ticketId/requester-respond` (`WAITING_FOR_REQUESTER` → `OPEN`, Lab 3 unchanged). Inactive users receive `403 ACCOUNT_INACTIVE` via the global session guard.
 
 **Request body:**
 
@@ -336,7 +337,9 @@ Ticket Detail response is unchanged from Lab 3 except the Lab 4 fields in §3 ar
 
 Tests live under `server/tests/lab-04/` and are planned in `docs/lab-04/tests.md`:
 
-- `actions-taken.api.test.ts` — create/list/edit, validation, role restrictions, concurrency
+- `actions-taken.api.test.ts` — create/list/edit, validation, role restrictions incl. `403 ACCOUNT_INACTIVE` (API-39), concurrency
 - `ticket-workflow.api.test.ts` — resolution gate, full transition matrix, stale-write handling
 - `requester-dashboard.api.test.ts` — metric calculations, empty states, ownership scoping
-- `staff-dashboard.api.test.ts` — metric calculations, empty states, `myAssigned` scoping
+- `staff-dashboard.api.test.ts` — metric calculations, empty states, `myAssigned` scoping, `userCounts` active-only
+- `lab04-validators.unit.test.ts` — UNIT-01–UNIT-05 pure logic (gate, version, follow-up, metrics, `actionAt`)
+- `dashboard-smoke.perf.test.ts` — PERF-01 smoke timing

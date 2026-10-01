@@ -213,6 +213,7 @@ artifacts/lab-04/screenshots/
 ├── requester-dashboard/
 │   ├── desktop-dashboard.png
 │   ├── desktop-dashboard-empty.png
+│   ├── tablet-dashboard.png
 │   └── mobile-dashboard.png
 └── actions-taken/
     ├── desktop-list.png

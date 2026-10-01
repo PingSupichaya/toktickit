@@ -95,12 +95,13 @@ Roles: `REQUESTER`, `IT_STAFF`, `ADMIN`. Per the Lab 3 model, "Staff" = `IT_STAF
 | View Actions Taken on owned/any Ticket | Owned only | Any | Any |
 | Create Action Taken | — | ✔ | ✔ |
 | Edit Action Taken | — | ✔ (any Ticket) | ✔ |
-| Update Ticket status / IT Priority / owner | WAITING_FOR_REQUESTER → OPEN only (unchanged, Lab 3) | ✔ | ✔ |
+| Update Ticket status / IT Priority / owner via `PATCH /api/tickets/:ticketId` | — (Requesters never call PATCH; see below) | ✔ | ✔ |
+| Requester respond `POST /api/tickets/:ticketId/requester-respond` (own Ticket `WAITING_FOR_REQUESTER` → `OPEN`, unchanged Lab 3) | Own Ticket only | — | — |
 | Transition Ticket to RESOLVED | — | ✔ (subject to FR-07 gate) | ✔ (subject to FR-07 gate) |
 | Requester Dashboard | Own data only | — | — |
 | IT Staff Dashboard | — | ✔ | ✔ |
 
-All other rows from the Lab 3 authorization matrix (login, tickets, comments, notes, attachments, user management) are unchanged and remain in force.
+All other rows from the Lab 3 authorization matrix (login, tickets, comments, notes, attachments, user management) are unchanged and remain in force. Inactive users (`isActive = false`) are rejected on every authenticated endpoint with `403 ACCOUNT_INACTIVE` by the global session guard, so an inactive Staff member can neither create/edit Actions Taken nor call either dashboard.
 
 ---
 
@@ -158,7 +159,7 @@ All other rows from the Lab 3 authorization matrix (login, tickets, comments, no
 - **My Recent Tickets** — the 5 most recently updated Tickets owned by the current user (`updatedAt desc`)
 - **Administrator-only extension (`userCounts`)** — when the caller is `ADMIN`, the same response additionally includes concise active user-account counts (handout §4.6, optional clause adopted per reviewer feedback): `requesters` (count where `role = REQUESTER AND isActive = true`), `itStaff` (`IT_STAFF`, active), `admins` (`ADMIN`, active). Returned inside `data.userCounts`; omitted entirely (not `null`) for `IT_STAFF` callers. Inactive users are never counted.
 
-**BR-16** Every dashboard count and list is computed fresh on each request against the current database state; no dashboard value is pre-aggregated or cached across requests (FR-12).
+**BR-16** Every dashboard count and list is computed fresh on each request against the current database state; no dashboard value is pre-aggregated or cached across requests (FR-12). Pre-Lab-4 (legacy) Tickets are counted normally under the same rules — there is no separate legacy bucket; the only historical exception is the resolution gate (D-03).
 
 **BR-17** When a dashboard list query returns zero rows, the API returns an empty array (never `null`) and the UI renders the screen's defined empty-state message (never a blank card).
 
@@ -388,3 +389,5 @@ Full endpoint details are defined in [`api-spec.md`](./api-spec.md). Authoritati
 **D-10: Requester Dashboard uses Waiting on You instead of the mockup's In Progress card.** Handout §4.6 requires "Tickets waiting for the Requester" and §8.2's figure shows "In Progress (2)" in that slot. §4.6 (normative dashboard rules) takes precedence over the illustrative figure; "Waiting on You" (`WAITING_FOR_REQUESTER`) is the only Requester-actionable state and directly supports FR-10's "attention-required" goal, while In Progress work is already covered inside the My Open Tickets aggregate (BR-14).
 
 **D-11: Staff Quick Actions omits Create Ticket shown in the §8.1 figure.** `POST /api/tickets` remains `REQUESTER only` per the Lab 3 contract (api-spec §4.6), and FR-14/BR-20 require Lab 2/3 auth behavior to continue identically — allowing Staff to create Tickets would be a new product feature outside the Sprint 4 contract. The Staff Quick Actions therefore offers only queue views the role may access: Browse Unassigned, Search Tickets, My Queue (ui-spec §4). Requester Dashboard keeps its Create Ticket quick action unchanged.
+
+**D-12: PDF Parts 5/6/7 wording map (no new behavior).** Part 5 "current-user Actions Taken" = `My Assigned` + `My Recent Tickets` on the Staff Dashboard (no per-action dashboard strip by design). Part 6 "assign / complete / cancel / inactive-assignee" = Ticket-level assign/claim and status moves from Lab 3 (unchanged, FR-14/BR-20); Actions Taken itself is create/edit-only with no delete/complete/cancel state, and inactive users receive `403 ACCOUNT_INACTIVE`. Part 7 "append-only" = no deletion of Actions Taken, comments, or notes; edit is allowed with `version` + `updatedById` audit (BR-07/BR-12).
