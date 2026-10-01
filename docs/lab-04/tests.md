@@ -144,11 +144,11 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 
 | Test ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
-| MIG-01 | MIG | §9.5 / AC-12 | Migration preserves Lab 2/3 data | Row counts for `ticket`, `user`, `public_comment`, `internal_note`, `attachment` identical before/after migration; every existing Ticket gets `version = 1` | Planned |
-| MIG-02 | MIG | §9.6 | Seed data and idempotency | Tickets with 0 / 1 / multiple Actions Taken present (incl. one backdated `actionAt`); at least one qualifying-for-resolution Ticket; active/inactive users per role for `userCounts`; re-running seed produces no duplicates | Planned |
+| MIG-01 | MIG | §9.5 / AC-12 | Migration preserves Lab 2/3 data | Row counts for `ticket`, `user`, `public_comment`, `internal_note`, `attachment` identical before/after migration; every existing Ticket gets `version = 1` | Pass |
+| MIG-02 | MIG | §9.6 | Seed data and idempotency | Tickets with 0 / 1 / multiple Actions Taken present (incl. one backdated `actionAt`); at least one qualifying-for-resolution Ticket; active/inactive users per role for `userCounts`; re-running seed produces no duplicates | Pass |
 | MIG-03 | MIG | AC-12 / BR-20 | Full Lab 2/3 functional regression | Authentication, Requester Ticket/Attachment lifecycle, IT Staff Queue/Ticket ops, Public Comments, Internal Notes, Administrator User Management — every Lab 3 AC re-verified and still passes | Planned |
-| MIG-04 | MIG | D-03 | Pre-existing Resolved/Closed Tickets not retroactively blocked | Legacy Resolved/Closed Tickets from Lab 3 seed remain valid without a backfilled Action Taken | Planned |
-| MIG-05 | MIG | §9.5 rollback | Rollback / recovery path | Failed migration can be rolled back (`prisma migrate resolve --rolled-back`) or restored from pre-migration backup; re-run is safe with no data loss (verified by MIG-01 counts) | Planned |
+| MIG-04 | MIG | D-03 | Pre-existing Resolved/Closed Tickets not retroactively blocked | Legacy Resolved/Closed Tickets from Lab 3 seed remain valid without a backfilled Action Taken | Pass |
+| MIG-05 | MIG | §9.5 rollback | Rollback / recovery path | Failed migration can be rolled back (`prisma migrate resolve --rolled-back`) or restored from pre-migration backup; re-run is safe with no data loss (verified by MIG-01 counts) | Pass |
 
 ### 2.9 Performance Smoke — `server/tests/lab-04/dashboard-smoke.perf.test.ts`
 
