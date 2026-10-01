@@ -31,6 +31,7 @@ This document defines the REST API additions for TokTickIT Sprint 4: Actions Tak
 {
   "id": 501,
   "ticketId": 42,
+  "actionAt": "2026-09-20T09:15:00.000Z",
   "description": "Reseated the RAM and reran the diagnostic tool.",
   "result": "Diagnostic passed; battery drain no longer reproducible.",
   "followUpRequired": false,
@@ -39,10 +40,12 @@ This document defines the REST API additions for TokTickIT Sprint 4: Actions Tak
   "performedBy": { "id": 10, "name": "Sam Patel", "role": "IT_STAFF" },
   "updatedBy": null,
   "version": 1,
-  "createdAt": "2026-09-20T09:15:00.000Z",
-  "updatedAt": "2026-09-20T09:15:00.000Z"
+  "createdAt": "2026-09-20T09:20:00.000Z",
+  "updatedAt": "2026-09-20T09:20:00.000Z"
 }
 ```
+
+- `actionAt` — work-occurred time (BR-06), client-supplied UTC ISO-8601. `createdAt` is the backend-set log time and is never displayed as the work date.
 
 ### Ticket object — fields added in Lab 4
 
@@ -78,6 +81,7 @@ Create an Action Taken on a Ticket.
 
 ```json
 {
+  "actionAt": "2026-09-20T09:15:00.000Z",
   "description": "Reseated the RAM and reran the diagnostic tool.",
   "result": "Diagnostic passed; battery drain no longer reproducible.",
   "followUpRequired": false,
@@ -86,18 +90,19 @@ Create an Action Taken on a Ticket.
 }
 ```
 
-**Validation (BR-03, BR-04, BR-05):**
+**Validation (BR-03, BR-04, BR-05, BR-06):**
 
+- `actionAt`: required UTC ISO-8601; must not be more than 60s in the future vs the server clock → otherwise `400 ACTION_AT_IN_FUTURE`. Any past value is accepted (backdated logging allowed).
 - `description`, `result`: required, 1–2000 chars after trim.
 - `followUpRequired`: required boolean.
 - `followUpNote`: required, 1–1000 chars after trim, **only when** `followUpRequired = true`; must be empty/omitted when `followUpRequired = false` (a non-empty value in that case is rejected).
 - `attachmentNotes`: optional, 0–500 chars after trim.
 
-**Success (201):** the created ActionTaken object (`performedBy` = session user, `version = 1`, `createdAt`/`updatedAt` = now).
+**Success (201):** the created ActionTaken object (`performedBy` = session user, `version = 1`, `createdAt`/`updatedAt` = now, `actionAt` = supplied value).
 
 **Errors:**
 
-- `400 VALIDATION_ERROR` — field violations (`details` keyed by field, including `FOLLOW_UP_NOTE_REQUIRED` / `FOLLOW_UP_NOTE_NOT_ALLOWED`).
+- `400 VALIDATION_ERROR` — field violations (`details` keyed by field, including `FOLLOW_UP_NOTE_REQUIRED` / `FOLLOW_UP_NOTE_NOT_ALLOWED` / `ACTION_AT_IN_FUTURE`).
 - `401 UNAUTHORIZED`.
 - `403 FORBIDDEN` — Requester attempting to create (BR-02, AC-09).
 - `404 NOT_FOUND` — Ticket does not exist.
@@ -107,7 +112,7 @@ Create an Action Taken on a Ticket.
 
 ### 4.2 GET `/api/tickets/:ticketId/actions`
 
-List Actions Taken for a Ticket, oldest first (BR-08).
+List Actions Taken for a Ticket, oldest work first by `actionAt` asc, tie-break `id` asc (BR-08).
 
 **Access:** the submitting Requester of the Ticket (read-only), or `IT_STAFF`/`ADMIN` (any Ticket).
 
@@ -134,6 +139,7 @@ Edit an existing Action Taken. Optimistic-concurrency protected.
 ```json
 {
   "version": 1,
+  "actionAt": "2026-09-20T10:00:00.000Z",
   "description": "Reseated the RAM, reran diagnostics, and replaced the battery.",
   "result": "Battery replaced; confirmed stable over a 24-hour soak test.",
   "followUpRequired": false,
@@ -142,7 +148,7 @@ Edit an existing Action Taken. Optimistic-concurrency protected.
 }
 ```
 
-**Validation:** same field rules as §4.1 for any field supplied; `version` is required and must equal the ActionTaken's current stored `version` (BR-12).
+**Validation:** same field rules as §4.1 for any field supplied (including `actionAt` future-date rejection); `version` is required and must equal the ActionTaken's current stored `version` (BR-12).
 
 **Success (200):** the updated ActionTaken object; `version` incremented by 1; `updatedBy` set to the editing user; `updatedAt` refreshed. `performedBy` and `createdAt` are unchanged.
 
@@ -177,7 +183,7 @@ Update Ticket operational fields. Behavior unchanged from Lab 3 except: (a) `ver
 - `version` required; must match the Ticket's current stored `version` → otherwise `409 STALE_UPDATE` (same body shape as §4.3, with the current Ticket object).
 - `itPriority ∈ {LOW, MEDIUM, HIGH}` (unchanged).
 - `currentStatus` must be a permitted transition per §7 of `specification.md` → otherwise `409 TICKET_STATUS_TRANSITION_NOT_ALLOWED` (unchanged from Lab 3).
-- **New:** if `currentStatus = RESOLVED`, the Ticket must have ≥ 1 Action Taken and the most recent Action Taken must have `followUpRequired = false` → otherwise `409 RESOLUTION_NOT_ALLOWED`:
+- **New:** if `currentStatus = RESOLVED`, the Ticket must have ≥ 1 Action Taken and the most recent Action Taken by `actionAt` (tie-break highest `id`) must have `followUpRequired = false` → otherwise `409 RESOLUTION_NOT_ALLOWED`:
   ```json
   { "error": { "code": "RESOLUTION_NOT_ALLOWED", "message": "This Ticket cannot be resolved yet — add an Action Taken with no outstanding follow-up first.", "details": {} } }
   ```
@@ -270,6 +276,15 @@ IT Staff Dashboard metrics and recent Tickets (BR-15).
 ```
 
 `new`/`open`/`inProgress`/`waitingForRequester` are queue-wide counts. `unassigned` counts Tickets where `ownerId IS NULL` and `currentStatus ∉ {RESOLVED, CLOSED, CANCELLED}`. `myAssigned` counts Tickets owned by the session user with `currentStatus ∉ {RESOLVED, CLOSED, CANCELLED}`. `byPriority` counts active (non-terminal) Tickets grouped by `itPriority` (BR-15). `recentTickets` is the current user's 5 most recently updated owned Tickets, `[]` when none (AC-10).
+
+**Administrator-only extension:** when the caller is `ADMIN`, the response additionally includes `userCounts` (BR-15, FR-11):
+
+```json
+{ "data": { "metrics": { "...": "as above" }, "userCounts": { "requesters": 41, "itStaff": 8, "admins": 2 }, "recentTickets": [] } }
+```
+
+- Each count is over `User` rows where `isActive = true`, grouped by `role`. Inactive users are excluded. Computed live per request (BR-16).
+- `IT_STAFF` callers never receive `userCounts` (field omitted, not `null`). Requesters cannot call this endpoint at all (`403`).
 
 **Drill-down (client routing to `GET /api/tickets/queue`, Lab 3 §4.8):**
 

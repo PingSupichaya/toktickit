@@ -50,6 +50,7 @@ Full width, max-width 1280px, consistent with the Ticket Queue container.
 1. **Welcome header:** "Welcome back, {FirstName}!" (24px Semi-bold) + subtitle "Here's what's happening with your queue today." (14px `#5A6F65`) + a "Refresh" ghost button top-right (`data-testid="dashboard-refresh-btn"`) that re-fetches without a full page reload.
 2. **Metric card row** (`data-testid="staff-metric-cards"`), 6 cards in a responsive grid (6 columns desktop ≥ 1024px, 3 columns tablet 768–1023px, 1-column stack mobile < 768px — see §9): **New**, **Open**, **In Progress**, **Waiting for Requester**, **Unassigned**, **My Assigned**. Each card's link drills into the Ticket Queue pre-filtered by that status (`assignment=unassigned` for **Unassigned**; `assignment=assignedToMe` for **My Assigned**; `status=` / `priority=` per api-spec §4.6).
 3. **Priority breakdown strip** (`data-testid="staff-priority-breakdown"`), directly beneath the metric card row: a single compact row of three inline counts — "Low: N", "Medium: N", "High: N" — over active (non-terminal-status) Tickets. Each count is a link that drills into the Ticket Queue pre-filtered by that `itPriority`. Rendered smaller and visually subordinate to the primary card row (13px labels) so it reads as a secondary detail, not a duplicate set of cards (specification.md D-08).
+3b. **Administrator-only user strip** (`data-testid="staff-user-counts"`, rendered only when the session role is `ADMIN`): single compact row — "Requesters **N** · IT Staff **N** · Admins **N**" (13px, same treatment as the priority strip; counts from `data.userCounts`, active users only). Each segment drills into User Management pre-filtered by that role (`/users?role=REQUESTER`, etc.); zero renders as `0`, never hidden.
 4. **Two-column content row** (stacks to one column < 1024px):
    - **Left — "My Recent Tickets"** (`data-testid="staff-recent-tickets"`): list of the current user's 5 most recently updated owned Tickets — ticket number (semibold, link to Ticket Detail), status badge, relative/short date. "View all" link (top-right of the card) → Ticket Queue filtered to `assignment=assignedToMe`.
    - **Right — "Quick Actions"** (`data-testid="staff-quick-actions"`): 3 icon-buttons — **Browse Unassigned** (→ Ticket Queue filtered to `assignment=unassigned`), **Search Tickets** (→ Ticket Queue with search focused), **My Queue** (→ Ticket Queue filtered to `assignment=assignedToMe`). No Create Ticket button for Staff (see specification.md D-11 — `POST /api/tickets` remains `REQUESTER only` per Lab 3).
@@ -92,22 +93,23 @@ Added as a new tab in the existing IT Staff Ticket Detail tabs card (Lab 3 §6.3
 
 ### 6.2 List (all roles that can view)
 
-- Ordered oldest → newest (BR-08), each row/card showing: Action Date/Time (formatted, e.g. "Sep 20, 2026, 9:15 AM"), Performed By (name + role badge), Description, Result, a "Follow-up required" amber tag when `followUpRequired = true` (with the Follow-up Note shown beneath it), Attachment Notes (muted italic, shown only if present), and — for IT Staff/Admin only — an "Edit" ghost button (`data-testid="edit-action-btn"`) per row.
+- Ordered oldest → newest by Action Date/Time (BR-08), each row/card showing: Action Date/Time from `actionAt` (formatted, e.g. "Sep 20, 2026, 9:15 AM"), Performed By (name + role badge), Description, Result, a "Follow-up required" amber tag when `followUpRequired = true` (with the Follow-up Note shown beneath it), Attachment Notes (muted italic, shown only if present), and — for IT Staff/Admin only — an "Edit" ghost button (`data-testid="edit-action-btn"`) per row.
 - Empty state: "No Actions Taken recorded yet." (`data-testid="actions-taken-empty"`), shown to all roles; IT Staff/Admin additionally see the "Add Action Taken" primary button in this state.
 
 ### 6.3 Create / Edit Form (IT Staff / Admin only)
 
 Side panel or inline expanding form (implementation's choice, must not obscure the existing list) with:
 
+- **Action Date/Time** `datetime-local` picker (`data-testid="action-datetime-input"`), required — defaults to now, `max` set to now (blocks future dates client-side); converts to UTC ISO-8601 on submit. Past values allowed for backdated logging (BR-06).
 - **Description** textarea, required, counter "0 / 2000" (`data-testid="action-description-input"`)
 - **Result** textarea, required, counter "0 / 2000" (`data-testid="action-result-input"`)
 - **Follow-Up Required?** toggle (`data-testid="action-followup-toggle"`), default off
 - **Follow-up Note** textarea (`data-testid="action-followup-note-input"`) — rendered and required only when the toggle above is on; hidden and cleared when the toggle is off
 - **Attachment Notes** text input, optional, counter "0 / 500" (`data-testid="action-attachment-notes-input"`), helper text: "e.g. 'See diagnostic_log_2.pdf on the shared drive.'"
 - Primary **"Save Action Taken"** (`data-testid="save-action-btn"`), busy/disabled during submit (per Lab 2/3 button rules); Secondary "Cancel"
-- Read-only, non-editable in this form: Action Date/Time and Performed By (shown as static text at the top of the form when editing an existing entry, never as inputs)
+- Read-only, non-editable in this form: Performed By only (shown as static text at the top of the form when editing an existing entry, never as an input). Action Date/Time remains editable for correction.
 
-**Validation feedback:** inline error under Follow-up Note ("Required when follow-up is needed") when the toggle is on and the field is empty; inline error under Description/Result if outside the 1–2000 range.
+**Validation feedback:** inline error under Follow-up Note ("Required when follow-up is needed") when the toggle is on and the field is empty; inline error under Description/Result if outside the 1–2000 range; inline error under Action Date/Time ("Date cannot be in the future") when a future value is picked or the server returns `ACTION_AT_IN_FUTURE`.
 
 **Conflict feedback (`409 STALE_UPDATE`):** banner above the form: "This Action Taken was updated by someone else. The latest version has been loaded — please review and try again." — the form is repopulated with the server's current values and the hidden `version` field is refreshed automatically; the user's own unsaved edits in open fields are not silently discarded without this warning.
 
@@ -181,6 +183,8 @@ All Lab 2/3 `data-testid` values remain. New Lab 4 targets:
 | `metric-card-link` | "View all" drill-down link on a metric card |
 | `staff-priority-breakdown` | Priority breakdown strip container (Staff Dashboard) |
 | `priority-breakdown-low` / `-medium` / `-high` | Individual priority-breakdown drill-down links |
+| `staff-user-counts` | Admin-only user strip (ADMIN viewers only; omitted for IT_STAFF) |
+| `action-datetime-input` | Action Date/Time datetime-local picker |
 | `staff-recent-tickets` / `requester-recent-tickets` | Recent Tickets list card |
 | `staff-quick-actions` / `requester-quick-actions` | Quick Actions card |
 | `tab-actions` | Actions Taken tab (Staff Ticket Detail) |
@@ -224,13 +228,15 @@ artifacts/lab-04/screenshots/
 - [ ] Metric cards show correct counts against seeded data (cross-checked with a direct query — Part 5 evidence requirement).
 - [ ] Zero-value metrics render as `0`, not blank or hidden.
 - [ ] Unassigned card and the Low/Medium/High priority breakdown strip both render with correct counts and drill-down links (Staff Dashboard).
+- [ ] Admin-only user strip renders for ADMIN (Requesters / IT Staff / Admins active counts with role-filtered drill-down) and is omitted for IT_STAFF.
 - [ ] Every card's drill-down opens the correctly pre-filtered Queue/My Tickets view.
 - [ ] Recent Tickets empty state renders correctly for a user with no Tickets.
 - [ ] Dashboard is the default landing page after login for every role.
 - [ ] Responsive grid collapses correctly at each breakpoint; no horizontal scroll at 375px.
 
 ### Actions Taken — checklist
-- [ ] List ordered oldest → newest; Action Date/Time and Performed By are never editable.
+- [ ] List ordered oldest → newest by Action Date/Time (`actionAt`); Performed By is never editable, Action Date/Time is editable via picker.
+- [ ] Picker defaults to now with `max` = now; future dates blocked client-side and rejected server-side (`ACTION_AT_IN_FUTURE`).
 - [ ] Follow-up Note required only when the toggle is on; validation blocks the mismatched case.
 - [ ] Requester view has zero write controls (no Add/Edit buttons rendered, not just disabled).
 - [ ] Staff can edit an Action Taken they did not personally create.

@@ -48,9 +48,9 @@ IT Staff can now talk to Requesters, but there is still no reliable record of th
 
 **FR-01** An IT Staff or Administrator user must be able to create an Action Taken on any Ticket, regardless of who owns it.
 
-**FR-02** An Action Taken must record: Action Date/Time (backend-set at creation), Action Description, Result, Performed By (backend-set to the authenticated actor), Follow-Up Required (boolean), Follow-up Note (required only when Follow-Up Required is true), and Attachment Notes (optional free text).
+**FR-02** An Action Taken must record: Action Date/Time (`actionAt`, supplied by IT Staff — defaults to now, never in the future), Action Description, Result, Performed By (backend-set to the authenticated actor), Follow-Up Required (boolean), Follow-up Note (required only when Follow-Up Required is true), and Attachment Notes (optional free text). The record-creation timestamp (`createdAt`) is additionally set by the backend as an audit field and is never shown as the work date.
 
-**FR-03** An IT Staff or Administrator user must be able to edit an existing Action Taken's Description, Result, Follow-Up Required, Follow-up Note, and Attachment Notes. Action Date/Time and Performed By never change after creation.
+**FR-03** An IT Staff or Administrator user must be able to edit an existing Action Taken's Action Date/Time, Description, Result, Follow-Up Required, Follow-up Note, and Attachment Notes. Performed By never changes after creation.
 
 **FR-04** A Requester must be able to view all Actions Taken on a Ticket they own, in read-only form; a Requester must never be able to create or edit an Action Taken.
 
@@ -60,7 +60,7 @@ IT Staff can now talk to Requesters, but there is still no reliable record of th
 
 **FR-06** The system must enforce the complete Ticket status-transition matrix (§7) identically to how Lab 3 enforced its subset; the backend is always authoritative regardless of what the client sends.
 
-**FR-07** A Ticket must not be permitted to transition to `RESOLVED` unless it has at least one Action Taken and the most recent Action Taken does not have an outstanding Follow-Up Required flag.
+**FR-07** A Ticket must not be permitted to transition to `RESOLVED` unless it has at least one Action Taken and the most recent Action Taken by `actionAt` does not have an outstanding Follow-Up Required flag.
 
 **FR-08** A Requester's "Problem Appears Resolved" indicator remains advisory only (per Lab 3 BR-05/BR-21) and never itself changes Ticket status.
 
@@ -70,7 +70,7 @@ IT Staff can now talk to Requesters, but there is still no reliable record of th
 
 **FR-10** An authenticated Requester must be able to retrieve a dashboard summarizing only their own Tickets: open-ticket counts by category (§6.3), a recent-Tickets list, and drill-down links into a pre-filtered My Tickets view.
 
-**FR-11** An authenticated IT Staff or Administrator user must be able to retrieve a dashboard summarizing queue-wide operational counts by status, the count of unassigned Tickets, a breakdown of active Tickets by IT Priority, the current user's assigned-Ticket count, a recent/urgent-Tickets list, and drill-down links into a pre-filtered Ticket Queue or a specific Ticket Detail (handout §6: "unassigned Tickets", "Tickets owned by the current user", "Tickets by status or IT Priority", and "recently updated Tickets").
+**FR-11** An authenticated IT Staff or Administrator user must be able to retrieve a dashboard summarizing queue-wide operational counts by status, the count of unassigned Tickets, a breakdown of active Tickets by IT Priority, the current user's assigned-Ticket count, a recent/urgent-Tickets list, and drill-down links into a pre-filtered Ticket Queue or a specific Ticket Detail (handout §6: "unassigned Tickets", "Tickets owned by the current user", "Tickets by status or IT Priority", and "recently updated Tickets"). When the caller is `ADMIN`, the response additionally includes concise active user-account counts (`userCounts`: active Requesters / IT Staff / Admins, BR-15).
 
 **FR-12** Every dashboard metric must be computed by the backend from authoritative data at request time; no metric may be cached client-side beyond the current page view.
 
@@ -120,17 +120,17 @@ All other rows from the Lab 3 authorization matrix (login, tickets, comments, no
 
 **BR-05** Attachment Notes is optional free text, 0–500 characters after trimming, and never references or validates an actual uploaded file — it exists only to tell a reader where to look (BR-05 does not create or modify any Attachment record).
 
-**BR-06** Action Date/Time and Performed By are set exclusively by the backend from the authenticated session and the server clock at creation time; neither is ever accepted from the client and neither changes on edit.
+**BR-06** Action Date/Time (`actionAt`) is supplied by the client as UTC ISO-8601, required on create; Performed By (`performedById`) is set exclusively by the backend from the authenticated session and is never accepted from the client. `actionAt` must not be in the future beyond a 60-second clock-skew tolerance (otherwise `400 VALIDATION_ERROR`, code `ACTION_AT_IN_FUTURE`); the UI defaults the picker to now and caps `max` at now. `createdAt` (record-log time) is set exclusively by the backend at creation and is never used as the displayed work date.
 
-**BR-07** Editing an Action Taken updates `updatedAt` and `updatedById` (the editor, which may differ from the original `performedById`); the original `performedById` and `createdAt` never change.
+**BR-07** Editing an Action Taken updates `actionAt` (when supplied, revalidated per BR-06), `updatedAt`, and `updatedById` (the editor, which may differ from the original `performedById`); the original `performedById` and `createdAt` never change.
 
-**BR-08** Actions Taken are listed on Ticket Detail ordered by `createdAt` ascending (oldest first), matching the Public Comment/Internal Note ordering convention from Lab 3.
+**BR-08** Actions Taken are listed on Ticket Detail ordered by `actionAt` ascending (oldest work first), tie-broken by `id` ascending; this preserves a stable chronological work-log order even when actions are backdated.
 
 ### 6.2 Ticket Status, Resolution, and Concurrency
 
 **BR-09** The required Ticket statuses remain `NEW`, `OPEN`, `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, `RESOLVED`, `CLOSED`, `REOPENED`, and `CANCELLED` (unchanged from Lab 3).
 
-**BR-10** A Ticket may transition to `RESOLVED` only if: (a) at least one Action Taken exists on the Ticket, and (b) the most recently created Action Taken has `followUpRequired = false`. Violating either condition returns `409 RESOLUTION_NOT_ALLOWED` and is enforced server-side even if the client UI is bypassed.
+**BR-10** A Ticket may transition to `RESOLVED` only if: (a) at least one Action Taken exists on the Ticket, and (b) the most recent Action Taken by `actionAt` (tie-break highest `id`) has `followUpRequired = false`. Violating either condition returns `409 RESOLUTION_NOT_ALLOWED` and is enforced server-side even if the client UI is bypassed.
 
 **BR-11** All other permitted transitions and roles are unchanged from the Lab 3 transition matrix (reproduced in full in §7 for completeness, since this document supersedes Lab 3's).
 
@@ -156,6 +156,7 @@ All other rows from the Lab 3 authorization matrix (login, tickets, comments, no
 - **My Assigned** — count where `ownerId = session.user.id` and `currentStatus ∉ {RESOLVED, CLOSED, CANCELLED}`
 - **By IT Priority** — three sub-counts (`low`, `medium`, `high`) of Tickets where `itPriority ∈ {LOW, MEDIUM, HIGH}` respectively and `currentStatus ∉ {RESOLVED, CLOSED, CANCELLED}` (satisfies handout §6's "Tickets by status or IT Priority"; shown as a compact secondary breakdown rather than a 6th–8th full metric card, per D-08)
 - **My Recent Tickets** — the 5 most recently updated Tickets owned by the current user (`updatedAt desc`)
+- **Administrator-only extension (`userCounts`)** — when the caller is `ADMIN`, the same response additionally includes concise active user-account counts (handout §4.6, optional clause adopted per reviewer feedback): `requesters` (count where `role = REQUESTER AND isActive = true`), `itStaff` (`IT_STAFF`, active), `admins` (`ADMIN`, active). Returned inside `data.userCounts`; omitted entirely (not `null`) for `IT_STAFF` callers. Inactive users are never counted.
 
 **BR-16** Every dashboard count and list is computed fresh on each request against the current database state; no dashboard value is pre-aggregated or cached across requests (FR-12).
 
@@ -227,6 +228,7 @@ Same breakpoints and rules as Labs 2–3 (desktop ≥ 1024px, tablet 768–1023p
 |---|---|---|---|
 | id | Int | No | PK, auto-increment |
 | ticketId | Int | No | FK → Ticket |
+| actionAt | DateTime | No | Work-occurred time, client-supplied (BR-06); this is the Action Date/Time shown in the UI |
 | description | String | No | 1–2000 chars after trim (BR-03) |
 | result | String | No | 1–2000 chars after trim (BR-03) |
 | followUpRequired | Boolean | No | Default `false` |
@@ -235,10 +237,10 @@ Same breakpoints and rules as Labs 2–3 (desktop ≥ 1024px, tablet 768–1023p
 | performedById | Int | No | FK → User; set once at creation (BR-06) |
 | updatedById | Int | Yes | FK → User; set on every edit (BR-07) |
 | version | Int | No | Default `1`; optimistic-concurrency counter, incremented on every successful edit (D-01) |
-| createdAt | DateTime | No | Backend-set; this is the Action Date/Time shown in the UI |
+| createdAt | DateTime | No | Backend-set audit field (record-log time); never displayed as the work date |
 | updatedAt | DateTime | No | Auto, updated on edit |
 
-Indexes: index on `ticketId`; composite `(ticketId, createdAt)` for the ordered list (BR-08).
+Indexes: index on `ticketId`; composite `(ticketId, actionAt, id)` for the ordered list (BR-08).
 
 ### 9.2 Changed Model: Ticket
 
@@ -275,6 +277,8 @@ Seed script must remain idempotent (safe to run repeatedly) and add, without rem
 - At least one Ticket with **multiple** Actions Taken (including at least one with `followUpRequired = true`)
 - At least one Ticket that is `RESOLVED` with a qualifying Action Taken, to demonstrate the gate being satisfied
 - Enough data spread across Requesters and IT Staff so both dashboards show non-zero metrics for at least one seeded user of each role, and zero metrics for at least one other seeded user (to exercise empty states)
+- At least one backdated Action Taken (`actionAt` in the past) to exercise `actionAt` ordering (BR-08)
+- A mix of active and inactive users per role so `userCounts` (active-only) has hand-computable non-trivial expected values (API-36)
 
 ---
 
@@ -289,14 +293,14 @@ Full endpoint details are defined in [`api-spec.md`](./api-spec.md). Authoritati
 | 3 | PATCH | `/api/tickets/:ticketId/actions/:actionId` | Edit an Action Taken (optimistic concurrency) | Staff | 200 |
 | 4 | PATCH | `/api/tickets/:ticketId` | *(Lab 3, extended)* Update status/IT Priority/owner; now requires `version` and enforces the resolution gate; response refreshes `canResolve` | Staff | 200 |
 | 5 | GET | `/api/dashboard/requester` | Requester Dashboard metrics + recent Tickets | Requester | 200 |
-| 6 | GET | `/api/dashboard/staff` | IT Staff Dashboard metrics + recent Tickets | Staff | 200 |
+| 6 | GET | `/api/dashboard/staff` | IT Staff Dashboard metrics + recent Tickets; `ADMIN` callers additionally receive `userCounts` (api-spec §4.6) | Staff | 200 |
 | 7 | GET | `/api/tickets/:ticketId` | *(Lab 3, extended)* Ticket Detail now includes `version`, `canResolve`, `actionCount`, `hasOutstandingFollowUp` (api-spec §4.7) | Owner-Req or Staff | 200 |
 
 ---
 
 ## 11. Acceptance Criteria
 
-**AC-01** Given a permitted IT Staff user and valid data, when an Action Taken is created, then it is saved under the correct Ticket with the authenticated actor as `performedById` and the server clock as `createdAt`.
+**AC-01** Given a permitted IT Staff user and valid data, when an Action Taken is created, then it is saved under the correct Ticket with the authenticated actor as `performedById`, the supplied `actionAt` as the work date, and the server clock as `createdAt` (audit field).
 
 **AC-02** Given an authenticated Requester, when the Requester Dashboard is requested, then only metrics and recent Tickets for that Requester's own Tickets are returned.
 
@@ -320,6 +324,10 @@ Full endpoint details are defined in [`api-spec.md`](./api-spec.md). Authoritati
 
 **AC-12** Given all Lab 2/3 regression scenarios (authentication, Requester Ticket/Attachment lifecycle, IT Staff Queue/Ticket operations, Public Comments, Internal Notes, Administrator User Management), when re-run after the Lab 4 migration, then every scenario passes identically to Lab 3.
 
+**AC-13** Given an Action Taken submission with `actionAt` in the future (beyond 60s tolerance), when the request is sent, then it is rejected `400 ACTION_AT_IN_FUTURE`; a past `actionAt` is accepted and appears in `actionAt`-ordered list position.
+
+**AC-14** Given an authenticated `ADMIN` user, when the Staff Dashboard is requested, then the response includes `userCounts` matching hand-computed active-user counts per role; an `IT_STAFF` caller receives the identical queue metrics without `userCounts`.
+
 ---
 
 ## 12. Definition of Done
@@ -327,7 +335,7 @@ Full endpoint details are defined in [`api-spec.md`](./api-spec.md). Authoritati
 ### Development
 - [ ] All features in the Included Scope are implemented
 - [ ] No feature from the Excluded Scope is present
-- [ ] All business rules (BR-01 – BR-21) are enforced server-side
+- [ ] All business rules (BR-01 – BR-21, as amended for `actionAt`/`userCounts`) are enforced server-side
 - [ ] Prisma schema matches §9; migration applies cleanly and preserves all Lab 2/3 data
 - [ ] Seed script runs without errors and is idempotent
 
@@ -337,7 +345,7 @@ Full endpoint details are defined in [`api-spec.md`](./api-spec.md). Authoritati
 - [ ] Duplicate-submission protection (BR-21) verified for Action Taken creation
 
 ### Testing
-- [ ] All acceptance criteria (AC-01 – AC-12) pass with automated tests
+- [ ] All acceptance criteria (AC-01 – AC-14) pass with automated tests
 - [ ] Dashboard calculation tests verify each metric against a known seeded dataset
 - [ ] Full Lab 2/3 regression suite passes unmodified in behavior
 - [ ] No test is skipped, disabled, or commented out on the final main branch
@@ -371,11 +379,11 @@ Full endpoint details are defined in [`api-spec.md`](./api-spec.md). Authoritati
 
 **D-06: Dashboard "trend" deltas (e.g. "+3 from yesterday") shown in the reference mockup are excluded.** Computing a same-time-yesterday delta requires either a snapshot table or replaying historical Ticket state, which is disproportionate to the value for a lab-scale dashboard and is not named in any FR/BR. The dashboard shows only current, authoritative counts.
 
-**D-07: The IT Staff Dashboard is reused, unmodified, for Administrator users** (per handout §4.6), rather than building a separate Administrator dashboard; Administrators additionally keep their existing User Management navigation link from Lab 3.
+**D-07: The IT Staff Dashboard is reused for Administrator users with one additive strip** (per handout §4.6's optional clause). Administrators see the identical queue metrics plus a compact `userCounts` strip (active Requesters / IT Staff / Admins); `IT_STAFF` callers never receive that field. No separate Administrator dashboard route is built; Administrators additionally keep their existing User Management navigation link from Lab 3.
 
 **D-08: IT Priority is shown as a compact secondary breakdown, not as three additional full metric cards.** Handout §6 requires "Tickets by status **or** IT Priority" (either satisfies the requirement on its own), and this document already covers "by status" via the New/Open/In Progress/Waiting for Requester cards. Adding three more full-size cards (Low/Medium/High) would push the primary card row to eight items, working against the handout's explicit instruction to "keep them concise" (§3, stakeholder request). The priority breakdown is instead rendered as a small inline three-segment list/bar beneath the main card row — still backend-calculated and drill-down-capable, but visually subordinate to the primary status counts.
 
-**D-09: Action Date/Time is backend-set (`createdAt` server clock), not user-entered.** The stakeholder request lists "Action Date/Time" without stating who sets it, while "Performed by (auto)" is explicitly marked auto. Treating the timestamp the same way as the actor — server clock at creation, immutable afterwards (BR-06) — prevents backdated/forged work logs, keeps ordering (BR-08) trustworthy, and matches the Lab 3 precedent for comments/notes (`createdAt` backend-set). No user-facing date picker is therefore implemented.
+**D-09 (revised per review): Action Date/Time is user-supplied (`actionAt`) with a future-date guard, not backend-only.** Only "Performed by (auto)" is explicitly marked auto in the stakeholder request and handout §8.3 lists "Action create date/time" as a regular field, so IT Staff must be able to backdate work that happened earlier (e.g. night-shift fix logged in the morning). The UI offers a `datetime-local` picker defaulting to now with `max` = now; the backend rejects `actionAt` more than 60s in the future (`ACTION_AT_IN_FUTURE`) while accepting any past value. Auditability is preserved via the separate backend-set `createdAt` log timestamp, and ordering (BR-08) plus the resolution gate (BR-10) key off `actionAt` so the work log stays chronological.
 
 **D-10: Requester Dashboard uses Waiting on You instead of the mockup's In Progress card.** Handout §4.6 requires "Tickets waiting for the Requester" and §8.2's figure shows "In Progress (2)" in that slot. §4.6 (normative dashboard rules) takes precedence over the illustrative figure; "Waiting on You" (`WAITING_FOR_REQUESTER`) is the only Requester-actionable state and directly supports FR-10's "attention-required" goal, while In Progress work is already covered inside the My Open Tickets aggregate (BR-14).
 
