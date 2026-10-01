@@ -95,12 +95,13 @@ Roles: `REQUESTER`, `IT_STAFF`, `ADMIN`. Per the Lab 3 model, "Staff" = `IT_STAF
 | View Actions Taken on owned/any Ticket | Owned only | Any | Any |
 | Create Action Taken | — | ✔ | ✔ |
 | Edit Action Taken | — | ✔ (any Ticket) | ✔ |
-| Update Ticket status / IT Priority / owner | WAITING_FOR_REQUESTER → OPEN only (unchanged, Lab 3) | ✔ | ✔ |
+| Update Ticket status / IT Priority / owner via `PATCH /api/tickets/:ticketId` | — (Requesters never call PATCH; see below) | ✔ | ✔ |
+| Requester respond `POST /api/tickets/:ticketId/requester-respond` (own Ticket `WAITING_FOR_REQUESTER` → `OPEN`, unchanged Lab 3) | Own Ticket only | — | — |
 | Transition Ticket to RESOLVED | — | ✔ (subject to FR-07 gate) | ✔ (subject to FR-07 gate) |
 | Requester Dashboard | Own data only | — | — |
 | IT Staff Dashboard | — | ✔ | ✔ |
 
-All other rows from the Lab 3 authorization matrix (login, tickets, comments, notes, attachments, user management) are unchanged and remain in force.
+All other rows from the Lab 3 authorization matrix (login, tickets, comments, notes, attachments, user management) are unchanged and remain in force. Inactive users (`isActive = false`) are rejected on every authenticated endpoint with `403 ACCOUNT_INACTIVE` by the global session guard, so an inactive Staff member can neither create/edit Actions Taken nor call either dashboard.
 
 ---
 
@@ -116,11 +117,11 @@ All other rows from the Lab 3 authorization matrix (login, tickets, comments, no
 
 **BR-03** Action Description and Result are required, 1–2000 characters after trimming; whitespace-only content is rejected.
 
-**BR-04** Follow-up Note is required and must be 1–1000 characters after trimming when Follow-Up Required is `true`; it must be empty/null when Follow-Up Required is `false`. Submitting a non-empty Follow-up Note while Follow-Up Required is `false` is rejected as invalid.
+**BR-04** Follow-up Note is required and must be 1–1000 characters after trimming when Follow-Up Required is `true` (otherwise `400 FOLLOW_UP_NOTE_REQUIRED`). When Follow-Up Required is `false`, the backend normalizes any supplied Follow-up Note to `null` (auto-clear) instead of rejecting it — a stale note left in the form after untoggling must never cause a `400`.
 
 **BR-05** Attachment Notes is optional free text, 0–500 characters after trimming, and never references or validates an actual uploaded file — it exists only to tell a reader where to look (BR-05 does not create or modify any Attachment record).
 
-**BR-06** Action Date/Time (`actionAt`) is supplied by the client as UTC ISO-8601, required on create; Performed By (`performedById`) is set exclusively by the backend from the authenticated session and is never accepted from the client. `actionAt` must not be in the future beyond a 60-second clock-skew tolerance (otherwise `400 VALIDATION_ERROR`, code `ACTION_AT_IN_FUTURE`); the UI defaults the picker to now and caps `max` at now. `createdAt` (record-log time) is set exclusively by the backend at creation and is never used as the displayed work date.
+**BR-06** Action Date/Time (`actionAt`) is supplied by the client as UTC ISO-8601, required on create; Performed By (`performedById`) is set exclusively by the backend from the authenticated session and is never accepted from the client. `actionAt` must not be more than 5 minutes (300s) in the future vs the server clock (otherwise `400 VALIDATION_ERROR`, code `ACTION_AT_IN_FUTURE`); the UI defaults the picker to now and caps `max` at now. `createdAt` (record-log time) is set exclusively by the backend at creation and is never used as the displayed work date.
 
 **BR-07** Editing an Action Taken updates `actionAt` (when supplied, revalidated per BR-06), `updatedAt`, and `updatedById` (the editor, which may differ from the original `performedById`); the original `performedById` and `createdAt` never change.
 
@@ -130,7 +131,7 @@ All other rows from the Lab 3 authorization matrix (login, tickets, comments, no
 
 **BR-09** The required Ticket statuses remain `NEW`, `OPEN`, `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, `RESOLVED`, `CLOSED`, `REOPENED`, and `CANCELLED` (unchanged from Lab 3).
 
-**BR-10** A Ticket may transition to `RESOLVED` only if: (a) at least one Action Taken exists on the Ticket, and (b) the most recent Action Taken by `actionAt` (tie-break highest `id`) has `followUpRequired = false`. Violating either condition returns `409 RESOLUTION_NOT_ALLOWED` and is enforced server-side even if the client UI is bypassed.
+**BR-10** A Ticket may transition to `RESOLVED` only if: (a) at least one Action Taken exists on the Ticket, and (b) the most recent Action Taken by `actionAt` (tie-break highest `id`) has `followUpRequired = false`. Violating either condition returns `422 RESOLUTION_NOT_ALLOWED` (422, not 409, so the gate never collides with `409 STALE_UPDATE`) and is enforced server-side even if the client UI is bypassed.
 
 **BR-11** All other permitted transitions and roles are unchanged from the Lab 3 transition matrix (reproduced in full in §7 for completeness, since this document supersedes Lab 3's).
 
@@ -158,7 +159,7 @@ All other rows from the Lab 3 authorization matrix (login, tickets, comments, no
 - **My Recent Tickets** — the 5 most recently updated Tickets owned by the current user (`updatedAt desc`)
 - **Administrator-only extension (`userCounts`)** — when the caller is `ADMIN`, the same response additionally includes concise active user-account counts (handout §4.6, optional clause adopted per reviewer feedback): `requesters` (count where `role = REQUESTER AND isActive = true`), `itStaff` (`IT_STAFF`, active), `admins` (`ADMIN`, active). Returned inside `data.userCounts`; omitted entirely (not `null`) for `IT_STAFF` callers. Inactive users are never counted.
 
-**BR-16** Every dashboard count and list is computed fresh on each request against the current database state; no dashboard value is pre-aggregated or cached across requests (FR-12).
+**BR-16** Every dashboard count and list is computed fresh on each request against the current database state; no dashboard value is pre-aggregated or cached across requests (FR-12). Pre-Lab-4 (legacy) Tickets are counted normally under the same rules — there is no separate legacy bucket; the only historical exception is the resolution gate (D-03).
 
 **BR-17** When a dashboard list query returns zero rows, the API returns an empty array (never `null`) and the UI renders the screen's defined empty-state message (never a blank card).
 
@@ -208,7 +209,7 @@ Full visual, interaction, token, and state detail is defined in [`ui-spec.md`](.
 
 ### Required Feedback States
 
-Every new screen implements loading (skeleton), empty, no-results, forbidden, not-found, conflict (`409 STALE_UPDATE`, `409 RESOLUTION_NOT_ALLOWED`), validation, success, and safe API-failure feedback, consistent with the Lab 3 feedback matrix.
+Every new screen implements loading (skeleton), empty, no-results, forbidden, not-found, conflict (`409 STALE_UPDATE`), unprocessable (`422 RESOLUTION_NOT_ALLOWED`), validation, success, and safe API-failure feedback, consistent with the Lab 3 feedback matrix.
 
 ### Navigation
 
@@ -304,9 +305,9 @@ Full endpoint details are defined in [`api-spec.md`](./api-spec.md). Authoritati
 
 **AC-02** Given an authenticated Requester, when the Requester Dashboard is requested, then only metrics and recent Tickets for that Requester's own Tickets are returned.
 
-**AC-03** Given a Ticket with zero Actions Taken, when IT Staff attempts to transition it to `RESOLVED`, then the request is rejected `409 RESOLUTION_NOT_ALLOWED` and the Ticket status is unchanged.
+**AC-03** Given a Ticket with zero Actions Taken, when IT Staff attempts to transition it to `RESOLVED`, then the request is rejected `422 RESOLUTION_NOT_ALLOWED` and the Ticket status is unchanged.
 
-**AC-04** Given a Ticket whose most recent Action Taken has `followUpRequired = true`, when IT Staff attempts to transition it to `RESOLVED`, then the request is rejected `409 RESOLUTION_NOT_ALLOWED`.
+**AC-04** Given a Ticket whose most recent Action Taken has `followUpRequired = true`, when IT Staff attempts to transition it to `RESOLVED`, then the request is rejected `422 RESOLUTION_NOT_ALLOWED`.
 
 **AC-05** Given a Ticket with at least one Action Taken and no outstanding follow-up, when IT Staff transitions it to `RESOLVED`, then the transition succeeds and the Ticket summary refreshes.
 
@@ -324,7 +325,7 @@ Full endpoint details are defined in [`api-spec.md`](./api-spec.md). Authoritati
 
 **AC-12** Given all Lab 2/3 regression scenarios (authentication, Requester Ticket/Attachment lifecycle, IT Staff Queue/Ticket operations, Public Comments, Internal Notes, Administrator User Management), when re-run after the Lab 4 migration, then every scenario passes identically to Lab 3.
 
-**AC-13** Given an Action Taken submission with `actionAt` in the future (beyond 60s tolerance), when the request is sent, then it is rejected `400 ACTION_AT_IN_FUTURE`; a past `actionAt` is accepted and appears in `actionAt`-ordered list position.
+**AC-13** Given an Action Taken submission with `actionAt` more than 5 minutes in the future, when the request is sent, then it is rejected `400 ACTION_AT_IN_FUTURE`; a past `actionAt` is accepted and appears in `actionAt`-ordered list position.
 
 **AC-14** Given an authenticated `ADMIN` user, when the Staff Dashboard is requested, then the response includes `userCounts` matching hand-computed active-user counts per role; an `IT_STAFF` caller receives the identical queue metrics without `userCounts`.
 
@@ -383,8 +384,10 @@ Full endpoint details are defined in [`api-spec.md`](./api-spec.md). Authoritati
 
 **D-08: IT Priority is shown as a compact secondary breakdown, not as three additional full metric cards.** Handout §6 requires "Tickets by status **or** IT Priority" (either satisfies the requirement on its own), and this document already covers "by status" via the New/Open/In Progress/Waiting for Requester cards. Adding three more full-size cards (Low/Medium/High) would push the primary card row to eight items, working against the handout's explicit instruction to "keep them concise" (§3, stakeholder request). The priority breakdown is instead rendered as a small inline three-segment list/bar beneath the main card row — still backend-calculated and drill-down-capable, but visually subordinate to the primary status counts.
 
-**D-09 (revised per review): Action Date/Time is user-supplied (`actionAt`) with a future-date guard, not backend-only.** Only "Performed by (auto)" is explicitly marked auto in the stakeholder request and handout §8.3 lists "Action create date/time" as a regular field, so IT Staff must be able to backdate work that happened earlier (e.g. night-shift fix logged in the morning). The UI offers a `datetime-local` picker defaulting to now with `max` = now; the backend rejects `actionAt` more than 60s in the future (`ACTION_AT_IN_FUTURE`) while accepting any past value. Auditability is preserved via the separate backend-set `createdAt` log timestamp, and ordering (BR-08) plus the resolution gate (BR-10) key off `actionAt` so the work log stays chronological.
+**D-09 (revised per review): Action Date/Time is user-supplied (`actionAt`) with a future-date guard, not backend-only.** Only "Performed by (auto)" is explicitly marked auto in the stakeholder request and handout §8.3 lists "Action create date/time" as a regular field, so IT Staff must be able to backdate work that happened earlier (e.g. night-shift fix logged in the morning). The UI offers a `datetime-local` picker defaulting to now with `max` = now; the backend rejects `actionAt` more than 5 minutes (300s) in the future (`ACTION_AT_IN_FUTURE`) while accepting any past value. Auditability is preserved via the separate backend-set `createdAt` log timestamp, and ordering (BR-08) plus the resolution gate (BR-10) key off `actionAt` so the work log stays chronological.
 
 **D-10: Requester Dashboard uses Waiting on You instead of the mockup's In Progress card.** Handout §4.6 requires "Tickets waiting for the Requester" and §8.2's figure shows "In Progress (2)" in that slot. §4.6 (normative dashboard rules) takes precedence over the illustrative figure; "Waiting on You" (`WAITING_FOR_REQUESTER`) is the only Requester-actionable state and directly supports FR-10's "attention-required" goal, while In Progress work is already covered inside the My Open Tickets aggregate (BR-14).
 
 **D-11: Staff Quick Actions omits Create Ticket shown in the §8.1 figure.** `POST /api/tickets` remains `REQUESTER only` per the Lab 3 contract (api-spec §4.6), and FR-14/BR-20 require Lab 2/3 auth behavior to continue identically — allowing Staff to create Tickets would be a new product feature outside the Sprint 4 contract. The Staff Quick Actions therefore offers only queue views the role may access: Browse Unassigned, Search Tickets, My Queue (ui-spec §4). Requester Dashboard keeps its Create Ticket quick action unchanged.
+
+**D-12: PDF Parts 5/6/7 wording map (no new behavior).** Part 5 "current-user Actions Taken" = `My Assigned` + `My Recent Tickets` on the Staff Dashboard (no per-action dashboard strip by design). Part 6 "assign / complete / cancel / inactive-assignee" = Ticket-level assign/claim and status moves from Lab 3 (unchanged, FR-14/BR-20); Actions Taken itself is create/edit-only with no delete/complete/cancel state, and inactive users receive `403 ACCOUNT_INACTIVE`. Part 7 "append-only" = no deletion of Actions Taken, comments, or notes; edit is allowed with `version` + `updatedById` audit (BR-07/BR-12).

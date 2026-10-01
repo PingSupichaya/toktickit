@@ -49,7 +49,7 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 | Test ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
 | API-01 | API | AC-01 / BR-03, BR-06 | Create a valid Action Taken | 201; correct `ticketId`, supplied `actionAt` stored, `performedById` = actor, `createdAt` server-set, `version = 1` | Planned |
-| API-02 | API | BR-04 | Follow-up Note required iff Follow-Up Required | `followUpRequired=true` + empty note → 400; `followUpRequired=false` + non-empty note → 400; valid combinations → 201 | Planned |
+| API-02 | API | BR-04 | Follow-up Note required when toggle is on, auto-cleared when off | `followUpRequired=true` + empty note → 400 `FOLLOW_UP_NOTE_REQUIRED`; `followUpRequired=false` + non-empty note → 201 with `followUpNote: null` (auto-clear, never 400) | Planned |
 | API-03 | API | AC-01 / BR-03 | Description/Result boundaries | 1–2000 chars accepted; empty/whitespace-only rejected (400) | Planned |
 | API-04 | API | BR-05 | Attachment Notes boundary and optionality | 0–500 chars accepted; omitted → stored as null; no Attachment record is created or referenced | Planned |
 | API-05 | API | AC-09 / BR-02 | Requester cannot create | Requester → 403; no record created | Planned |
@@ -61,15 +61,15 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 | API-11 | API | BR-06, BR-07 | Edit preserves immutable fields | `performedById` and `createdAt` unchanged after edit; `actionAt` editable with revalidation; `updatedById`/`updatedAt` set to the editor | Planned |
 | API-12 | API | AC-07 / BR-12 | Stale-write rejected on edit | Submitting an outdated `version` → 409 `STALE_UPDATE` with current record in `details`; correct `version` → 200, `version` incremented | Planned |
 | API-13 | API | BR-04 | Edit re-validates follow-up conditional | Editing to `followUpRequired=true` without a note → 400, even if the record previously had `followUpRequired=false` | Planned |
-| API-37 | API | AC-13 / BR-06 | `actionAt` future rejected, past accepted | Future `actionAt` (>60s ahead) → 400 `ACTION_AT_IN_FUTURE`; past `actionAt` → 201 and stored verbatim | Planned |
+| API-37 | API | AC-13 / BR-06 | `actionAt` future rejected, past accepted | Future `actionAt` (>5 min / 300s ahead) → 400 `ACTION_AT_IN_FUTURE`; within +5 min or past → 201 and stored verbatim | Planned |
 | API-38 | API | AC-04, AC-05 / BR-10 | Gate keys off latest `actionAt` | Backdated action inserted after a newer one does not become the gate reference; latest by `actionAt` (tie highest `id`) decides | Planned |
 
 ### 2.2 Ticket Workflow and Resolution — `server/tests/lab-04/ticket-workflow.api.test.ts`
 
 | Test ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
-| API-14 | API | AC-03 / BR-10 | Resolve with zero Actions Taken | 409 `RESOLUTION_NOT_ALLOWED`; status unchanged | Planned |
-| API-15 | API | AC-04 / BR-10 | Resolve with outstanding follow-up on latest action | Latest Action Taken has `followUpRequired=true` → 409 `RESOLUTION_NOT_ALLOWED` | Planned |
+| API-14 | API | AC-03 / BR-10 | Resolve with zero Actions Taken | 422 `RESOLUTION_NOT_ALLOWED`; status unchanged | Planned |
+| API-15 | API | AC-04 / BR-10 | Resolve with outstanding follow-up on latest action | Latest Action Taken has `followUpRequired=true` → 422 `RESOLUTION_NOT_ALLOWED` | Planned |
 | API-16 | API | AC-05 / BR-10 | Resolve when gate satisfied | ≥1 Action Taken, latest has `followUpRequired=false` → 200, status = RESOLVED | Planned |
 | API-17 | API | BR-10 | Gate looks only at the most recent action | Ticket has an earlier action with `followUpRequired=true` followed by a later action with `followUpRequired=false` → resolution succeeds | Planned |
 | API-18 | API | FR-06 / §7 matrix | Full transition matrix — permitted moves | Every positive transition in `specification.md` §7 persists | Planned |
@@ -101,6 +101,7 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 | API-34 | API | FR-11 / BR-15 | Administrator sees queue metrics plus userCounts | ADMIN receives 200 with identical queue metrics plus `userCounts` matching hand-computed active-user counts; `IT_STAFF` response omits `userCounts` entirely (D-07) | Planned |
 | API-35 | API | FR-12 / safe failure | Safe 500 shape on dashboard/actions endpoints | Forced server error → 500 with `{ error: { message, code: INTERNAL_SERVER_ERROR } }`, no stack/technical detail leaked | Planned |
 | API-36 | API | FR-11 / BR-15 | `userCounts` counts active users only | Inactive users excluded from all three sub-counts; verified against seeded active/inactive mix | Planned |
+| API-39 | API | BR-02 / §5 Auth matrix | Inactive Staff denied on Lab 4 endpoints | Inactive `IT_STAFF` calling actions/dashboard endpoints → `403 ACCOUNT_INACTIVE` via global session guard; no record created | Planned |
 
 ### 2.5 Unit Tests — `server/tests/lab-04/`
 
@@ -108,9 +109,9 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 |---|---|---|---|---|---|
 | UNIT-01 | Unit | BR-10 | Resolution-gate evaluator | `(actionCount, latestByActionAtFollowUpRequired) → allowed/denied` for all 4 input combinations | Planned |
 | UNIT-02 | Unit | BR-12 | Optimistic-concurrency comparator | Matching version → proceed; mismatched → reject, no side effects | Planned |
-| UNIT-03 | Unit | BR-04 | Follow-up conditional validator | All 4 `(followUpRequired, note-present)` combinations return the correct pass/fail | Planned |
+| UNIT-03 | Unit | BR-04 | Follow-up conditional validator | `true` + empty → fail; `true` + note → pass; `false` ± note → pass with note normalized to `null` | Planned |
 | UNIT-04 | Unit | BR-14, BR-15 | Dashboard metric query builders | Given a mocked ticket set, each metric function returns the mathematically correct count (including `userCounts` per role) | Planned |
-| UNIT-05 | Unit | BR-06 | `actionAt` validator | Future beyond tolerance → reject; past/now → accept; invalid ISO → reject | Planned |
+| UNIT-05 | Unit | BR-06 | `actionAt` validator | Future beyond +5 min → reject; within tolerance/past/now → accept; invalid ISO → reject | Planned |
 
 ### 2.6 UI Component Tests — `client/tests/lab-04/`
 
@@ -126,6 +127,7 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 | UI-07 | UI | AC-02, AC-11 / FR-10 | Requester Dashboard rendering | Metric cards render correct counts; zero-metrics show `0` not empty; recent-Tickets empty state renders correctly | `client/tests/lab-04/RequesterDashboard.test.tsx` |
 | UI-08 | UI | AC-10 / FR-11 | Staff Dashboard rendering | Same coverage as UI-07 for the Staff Dashboard, plus the Unassigned card and the Low/Medium/High priority breakdown strip; drill-down links (including each priority segment) carry the correct filter query params; ADMIN viewer additionally renders the `staff-user-counts` strip, IT_STAFF viewer omits it | `client/tests/lab-04/StaffDashboard.test.tsx` |
 | UI-09 | UI | FR-13 | Dashboard loading/failure states | Skeletons on load; safe error banner + Retry on failure | `client/tests/lab-04/StaffDashboard.test.tsx` |
+| UI-11 | UI | §8 Responsive + §10 A11y | Automated axe audit for Lab 4 screens | Dashboards + Actions Taken list/form render with zero axe violations (contrast stays manual per `axeAudit.ts` jsdom limitation) | `client/tests/lab-04/A11yLab04.test.tsx` |
 
 ### 2.7 End-to-End Tests (Playwright) — `e2e/lab-04/`
 
@@ -183,7 +185,7 @@ Verified by manual inspection and Playwright screenshot capture, per `ui-spec.md
 
 ### Playwright Screenshots Required — `artifacts/lab-04/screenshots/`
 - [ ] Staff Dashboard — desktop, empty state, tablet, mobile
-- [ ] Requester Dashboard — desktop, empty state, mobile
+- [ ] Requester Dashboard — desktop, empty state, tablet, mobile
 - [ ] Actions Taken — list, create form, follow-up-required state, resolution-blocked hint, stale-conflict banner, mobile, Requester read-only view
 
 ### Manual Visual Inspection
@@ -232,12 +234,12 @@ _Filled in on the final `main` branch before submission._
 | Type | Total | Pass | Fail | Pending |
 |---|---|---|---|---|
 | Unit | 5 | 0 | 0 | 5 |
-| API | 38 | 0 | 0 | 38 |
+| API | 39 | 0 | 0 | 39 |
 | MIG | 5 | 0 | 0 | 5 |
-| UI | 10 | 0 | 0 | 10 |
+| UI | 11 | 0 | 0 | 11 |
 | E2E | 6 | 0 | 0 | 6 |
 | PERF | 1 | 0 | 0 | 1 |
-| **Total** | **65** | **0** | **0** | **65** |
+| **Total** | **67** | **0** | **0** | **67** |
 
 ---
 

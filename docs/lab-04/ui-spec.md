@@ -104,7 +104,7 @@ Side panel or inline expanding form (implementation's choice, must not obscure t
 - **Description** textarea, required, counter "0 / 2000" (`data-testid="action-description-input"`)
 - **Result** textarea, required, counter "0 / 2000" (`data-testid="action-result-input"`)
 - **Follow-Up Required?** toggle (`data-testid="action-followup-toggle"`), default off
-- **Follow-up Note** textarea (`data-testid="action-followup-note-input"`) — rendered and required only when the toggle above is on; hidden and cleared when the toggle is off
+- **Follow-up Note** textarea (`data-testid="action-followup-note-input"`) — rendered and required only when the toggle above is on; hidden and cleared client-side when the toggle is off (the backend additionally auto-clears any stale note to `null` per BR-04, so untoggling never causes a `400`)
 - **Attachment Notes** text input, optional, counter "0 / 500" (`data-testid="action-attachment-notes-input"`), helper text: "e.g. 'See diagnostic_log_2.pdf on the shared drive.'"
 - Primary **"Save Action Taken"** (`data-testid="save-action-btn"`), busy/disabled during submit (per Lab 2/3 button rules); Secondary "Cancel"
 - Read-only, non-editable in this form: Performed By only (shown as static text at the top of the form when editing an existing entry, never as an input). Action Date/Time remains editable for correction.
@@ -141,7 +141,7 @@ Identical list rendering to §6.2 minus the Edit button and the "Add Action Take
 | Forbidden (403) | ErrorState; navigation simply omits the unauthorized destination |
 | Not found (404) | ErrorState "not found" + back action |
 | Conflict (409 STALE_UPDATE) | Conflict banner; form/fields refreshed to current server state |
-| Conflict (409 RESOLUTION_NOT_ALLOWED) | Inline hint on the Status select (§7) plus a banner if the write was attempted via a stale/disabled control |
+| Unprocessable (422 RESOLUTION_NOT_ALLOWED) | Inline hint on the Status select (§7) plus a banner if the write was attempted via a stale/disabled control |
 | Safe failure (500) | Error banner with a safe message; no technical detail |
 
 ---
@@ -213,6 +213,7 @@ artifacts/lab-04/screenshots/
 ├── requester-dashboard/
 │   ├── desktop-dashboard.png
 │   ├── desktop-dashboard-empty.png
+│   ├── tablet-dashboard.png
 │   └── mobile-dashboard.png
 └── actions-taken/
     ├── desktop-list.png

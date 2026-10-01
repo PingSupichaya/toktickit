@@ -18,8 +18,8 @@ This document defines the REST API additions for TokTickIT Sprint 4: Actions Tak
 
 | Status | Meaning |
 |--------|---------|
-| 409 `RESOLUTION_NOT_ALLOWED` | Ticket does not satisfy the resolution gate (BR-10) |
-| 409 `STALE_UPDATE` | The submitted `version` does not match the current stored version (BR-12) |
+| 422 `RESOLUTION_NOT_ALLOWED` | Ticket does not satisfy the resolution gate (BR-10). 422, not 409, so it never collides with concurrency conflicts |
+| 409 `STALE_UPDATE` | The submitted `version` does not match the current stored version (BR-12). 409 is reserved for concurrency/matrix conflicts only |
 
 ---
 
@@ -92,19 +92,20 @@ Create an Action Taken on a Ticket.
 
 **Validation (BR-03, BR-04, BR-05, BR-06):**
 
-- `actionAt`: required UTC ISO-8601; must not be more than 60s in the future vs the server clock → otherwise `400 ACTION_AT_IN_FUTURE`. Any past value is accepted (backdated logging allowed).
+- `actionAt`: required UTC ISO-8601; must not be more than 5 minutes (300s) in the future vs the server clock → otherwise `400 ACTION_AT_IN_FUTURE`. Any past value is accepted (backdated logging allowed).
 - `description`, `result`: required, 1–2000 chars after trim.
 - `followUpRequired`: required boolean.
-- `followUpNote`: required, 1–1000 chars after trim, **only when** `followUpRequired = true`; must be empty/omitted when `followUpRequired = false` (a non-empty value in that case is rejected).
+- `followUpNote`: required, 1–1000 chars after trim, **only when** `followUpRequired = true`; when `followUpRequired = false` any supplied value is ignored and stored as `null` (auto-clear, never a validation error).
 - `attachmentNotes`: optional, 0–500 chars after trim.
 
 **Success (201):** the created ActionTaken object (`performedBy` = session user, `version = 1`, `createdAt`/`updatedAt` = now, `actionAt` = supplied value).
 
 **Errors:**
 
-- `400 VALIDATION_ERROR` — field violations (`details` keyed by field, including `FOLLOW_UP_NOTE_REQUIRED` / `FOLLOW_UP_NOTE_NOT_ALLOWED` / `ACTION_AT_IN_FUTURE`).
+- `400 VALIDATION_ERROR` — field violations (`details` keyed by field, including `FOLLOW_UP_NOTE_REQUIRED` / `ACTION_AT_IN_FUTURE`). There is no `FOLLOW_UP_NOTE_NOT_ALLOWED`: a note sent with `followUpRequired = false` is auto-cleared to `null` (BR-04).
 - `401 UNAUTHORIZED`.
 - `403 FORBIDDEN` — Requester attempting to create (BR-02, AC-09).
+- `403 ACCOUNT_INACTIVE` — inactive user on any authenticated endpoint (global session guard).
 - `404 NOT_FOUND` — Ticket does not exist.
 - `500 INTERNAL_SERVER_ERROR`.
 
@@ -148,7 +149,7 @@ Edit an existing Action Taken. Optimistic-concurrency protected.
 }
 ```
 
-**Validation:** same field rules as §4.1 for any field supplied (including `actionAt` future-date rejection); `version` is required and must equal the ActionTaken's current stored `version` (BR-12).
+**Validation:** same field rules as §4.1 for any field supplied (including `actionAt` future-date rejection and BR-04 auto-clear of `followUpNote` when `followUpRequired = false`); `version` is required and must equal the ActionTaken's current stored `version` (BR-12).
 
 **Success (200):** the updated ActionTaken object; `version` incremented by 1; `updatedBy` set to the editing user; `updatedAt` refreshed. `performedBy` and `createdAt` are unchanged.
 
@@ -170,7 +171,7 @@ Edit an existing Action Taken. Optimistic-concurrency protected.
 
 Update Ticket operational fields. Behavior unchanged from Lab 3 except: (a) `version` is now required, (b) transitioning to `RESOLVED` is gated by BR-10.
 
-**Access:** `IT_STAFF` / `ADMIN` only.
+**Access:** `IT_STAFF` / `ADMIN` only. Requesters never call this endpoint — the sole Requester status write remains `POST /api/tickets/:ticketId/requester-respond` (`WAITING_FOR_REQUESTER` → `OPEN`, Lab 3 unchanged). Inactive users receive `403 ACCOUNT_INACTIVE` via the global session guard.
 
 **Request body:**
 
@@ -183,7 +184,7 @@ Update Ticket operational fields. Behavior unchanged from Lab 3 except: (a) `ver
 - `version` required; must match the Ticket's current stored `version` → otherwise `409 STALE_UPDATE` (same body shape as §4.3, with the current Ticket object).
 - `itPriority ∈ {LOW, MEDIUM, HIGH}` (unchanged).
 - `currentStatus` must be a permitted transition per §7 of `specification.md` → otherwise `409 TICKET_STATUS_TRANSITION_NOT_ALLOWED` (unchanged from Lab 3).
-- **New:** if `currentStatus = RESOLVED`, the Ticket must have ≥ 1 Action Taken and the most recent Action Taken by `actionAt` (tie-break highest `id`) must have `followUpRequired = false` → otherwise `409 RESOLUTION_NOT_ALLOWED`:
+- **New:** if `currentStatus = RESOLVED`, the Ticket must have ≥ 1 Action Taken and the most recent Action Taken by `actionAt` (tie-break highest `id`) must have `followUpRequired = false` → otherwise `422 RESOLUTION_NOT_ALLOWED`:
   ```json
   { "error": { "code": "RESOLUTION_NOT_ALLOWED", "message": "This Ticket cannot be resolved yet — add an Action Taken with no outstanding follow-up first.", "details": {} } }
   ```
@@ -191,7 +192,7 @@ Update Ticket operational fields. Behavior unchanged from Lab 3 except: (a) `ver
 
 **Success (200):** returns the updated Ticket (same shape as Lab 3 §4.9 minus comments/notes, plus `version` incremented by 1 and refreshed `canResolve` / `actionCount` / `hasOutstandingFollowUp` per §3).
 
-**Errors:** `400 VALIDATION_ERROR`; `401`; `403 FORBIDDEN`; `404 NOT_FOUND`; `409 STALE_UPDATE`; `409 TICKET_STATUS_TRANSITION_NOT_ALLOWED`; `409 RESOLUTION_NOT_ALLOWED`; `500`.
+**Errors:** `400 VALIDATION_ERROR`; `401`; `403 FORBIDDEN`; `404 NOT_FOUND`; `409 STALE_UPDATE`; `409 TICKET_STATUS_TRANSITION_NOT_ALLOWED`; `422 RESOLUTION_NOT_ALLOWED`; `500`.
 
 ---
 
@@ -322,7 +323,7 @@ Ticket Detail response is unchanged from Lab 3 except the Lab 4 fields in §3 ar
 1. Authentication / authorization checks.
 2. `version` match check (`409 STALE_UPDATE`).
 3. Transition-matrix legality check (`409 TICKET_STATUS_TRANSITION_NOT_ALLOWED`).
-4. Resolution-gate check, only when the target status is `RESOLVED` (`409 RESOLUTION_NOT_ALLOWED`).
+4. Resolution-gate check, only when the target status is `RESOLVED` (`422 RESOLUTION_NOT_ALLOWED`).
 5. Commit.
 
 ### Duplicate-submission handling (D-05, BR-21)
@@ -336,7 +337,9 @@ Ticket Detail response is unchanged from Lab 3 except the Lab 4 fields in §3 ar
 
 Tests live under `server/tests/lab-04/` and are planned in `docs/lab-04/tests.md`:
 
-- `actions-taken.api.test.ts` — create/list/edit, validation, role restrictions, concurrency
+- `actions-taken.api.test.ts` — create/list/edit, validation, role restrictions incl. `403 ACCOUNT_INACTIVE` (API-39), concurrency
 - `ticket-workflow.api.test.ts` — resolution gate, full transition matrix, stale-write handling
 - `requester-dashboard.api.test.ts` — metric calculations, empty states, ownership scoping
-- `staff-dashboard.api.test.ts` — metric calculations, empty states, `myAssigned` scoping
+- `staff-dashboard.api.test.ts` — metric calculations, empty states, `myAssigned` scoping, `userCounts` active-only
+- `lab04-validators.unit.test.ts` — UNIT-01–UNIT-05 pure logic (gate, version, follow-up, metrics, `actionAt`)
+- `dashboard-smoke.perf.test.ts` — PERF-01 smoke timing
