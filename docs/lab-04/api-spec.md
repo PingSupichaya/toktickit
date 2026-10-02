@@ -103,9 +103,8 @@ Create an Action Taken on a Ticket.
 **Errors:**
 
 - `400 VALIDATION_ERROR` — field violations (`details` keyed by field, including `FOLLOW_UP_NOTE_REQUIRED` / `ACTION_AT_IN_FUTURE`). There is no `FOLLOW_UP_NOTE_NOT_ALLOWED`: a note sent with `followUpRequired = false` is auto-cleared to `null` (BR-04).
-- `401 UNAUTHORIZED`.
+- `401 UNAUTHORIZED` — also returned for a deactivated user's existing session (invalidated by `requireSession`; fresh login → `403 ACCOUNT_INACTIVE`).
 - `403 FORBIDDEN` — Requester attempting to create (BR-02, AC-09).
-- `403 ACCOUNT_INACTIVE` — inactive user on any authenticated endpoint (global session guard).
 - `404 NOT_FOUND` — Ticket does not exist.
 - `500 INTERNAL_SERVER_ERROR`.
 
@@ -156,7 +155,7 @@ Edit an existing Action Taken. Optimistic-concurrency protected.
 **Errors:**
 
 - `400 VALIDATION_ERROR` — field violations, or missing `version`.
-- `401 UNAUTHORIZED`.
+- `401 UNAUTHORIZED` — also returned for a deactivated user's existing session (invalidated by `requireSession`; fresh login → `403 ACCOUNT_INACTIVE`).
 - `403 FORBIDDEN` — Requester attempting to edit.
 - `404 NOT_FOUND` — Ticket or Action Taken does not exist, or the Action Taken does not belong to the given Ticket.
 - `409 STALE_UPDATE` — submitted `version` does not match the current stored `version`; response body includes the current ActionTaken so the client can refresh:
@@ -171,7 +170,7 @@ Edit an existing Action Taken. Optimistic-concurrency protected.
 
 Update Ticket operational fields. Behavior unchanged from Lab 3 except: (a) `version` is now required, (b) transitioning to `RESOLVED` is gated by BR-10.
 
-**Access:** `IT_STAFF` / `ADMIN` only. Requesters never call this endpoint — the sole Requester status write remains `POST /api/tickets/:ticketId/requester-respond` (`WAITING_FOR_REQUESTER` → `OPEN`, Lab 3 unchanged). Inactive users receive `403 ACCOUNT_INACTIVE` via the global session guard.
+**Access:** `IT_STAFF` / `ADMIN` only. Requesters never call this endpoint — the sole Requester status write remains `POST /api/tickets/:ticketId/requester-respond` (`WAITING_FOR_REQUESTER` → `OPEN`, Lab 3 unchanged). Inactive users cannot obtain a session (login → `403 ACCOUNT_INACTIVE`); an existing session is invalidated (`401 UNAUTHORIZED`).
 
 **Request body:**
 
@@ -337,7 +336,7 @@ Ticket Detail response is unchanged from Lab 3 except the Lab 4 fields in §3 ar
 
 Tests live under `server/tests/lab-04/` and are planned in `docs/lab-04/tests.md`:
 
-- `actions-taken.api.test.ts` — create/list/edit, validation, role restrictions incl. `403 ACCOUNT_INACTIVE` (API-39), concurrency
+- `actions-taken.api.test.ts` — create/list/edit, validation, role restrictions incl. inactive-session `401` / login `403 ACCOUNT_INACTIVE` (API-39), concurrency
 - `ticket-workflow.api.test.ts` — resolution gate, full transition matrix, stale-write handling
 - `requester-dashboard.api.test.ts` — metric calculations, empty states, ownership scoping
 - `staff-dashboard.api.test.ts` — metric calculations, empty states, `myAssigned` scoping, `userCounts` active-only

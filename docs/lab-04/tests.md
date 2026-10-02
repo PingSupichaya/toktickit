@@ -48,20 +48,20 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 
 | Test ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
-| API-01 | API | AC-01 / BR-03, BR-06 | Create a valid Action Taken | 201; correct `ticketId`, supplied `actionAt` stored, `performedById` = actor, `createdAt` server-set, `version = 1` | Planned |
-| API-02 | API | BR-04 | Follow-up Note required when toggle is on, auto-cleared when off | `followUpRequired=true` + empty note → 400 `FOLLOW_UP_NOTE_REQUIRED`; `followUpRequired=false` + non-empty note → 201 with `followUpNote: null` (auto-clear, never 400) | Planned |
-| API-03 | API | AC-01 / BR-03 | Description/Result boundaries | 1–2000 chars accepted; empty/whitespace-only rejected (400) | Planned |
-| API-04 | API | BR-05 | Attachment Notes boundary and optionality | 0–500 chars accepted; omitted → stored as null; no Attachment record is created or referenced | Planned |
-| API-05 | API | AC-09 / BR-02 | Requester cannot create | Requester → 403; no record created | Planned |
-| API-06 | API | BR-02 | Staff member other than the Ticket Owner can create | Non-owner IT_STAFF creates successfully (200/201) | Planned |
-| API-07 | API | AC-08 / FR-04 | Requester can list (read-only) | 200; Requester on owned Ticket sees full list; cross-owner → 404 | Planned |
-| API-08 | API | FR-05 / BR-08 | List ordering | Returned oldest → newest by `actionAt` asc, tie-break `id` asc | Planned |
-| API-09 | API | AC-01 | Empty Ticket returns empty list | Ticket with zero Actions Taken → `{ "data": [] }`, not an error | Planned |
-| API-10 | API | AC-09 / BR-02 | Edit — role restriction | Requester → 403; IT_STAFF/ADMIN (including non-author) → 200 | Planned |
-| API-11 | API | BR-06, BR-07 | Edit preserves immutable fields | `performedById` and `createdAt` unchanged after edit; `actionAt` editable with revalidation; `updatedById`/`updatedAt` set to the editor | Planned |
-| API-12 | API | AC-07 / BR-12 | Stale-write rejected on edit | Submitting an outdated `version` → 409 `STALE_UPDATE` with current record in `details`; correct `version` → 200, `version` incremented | Planned |
-| API-13 | API | BR-04 | Edit re-validates follow-up conditional | Editing to `followUpRequired=true` without a note → 400, even if the record previously had `followUpRequired=false` | Planned |
-| API-37 | API | AC-13 / BR-06 | `actionAt` future rejected, past accepted | Future `actionAt` (>5 min / 300s ahead) → 400 `ACTION_AT_IN_FUTURE`; within +5 min or past → 201 and stored verbatim | Planned |
+| API-01 | API | AC-01 / BR-03, BR-06 | Create a valid Action Taken | 201; correct `ticketId`, supplied `actionAt` stored, `performedById` = actor, `createdAt` server-set, `version = 1` | Pass |
+| API-02 | API | BR-04 | Follow-up Note required when toggle is on, auto-cleared when off | `followUpRequired=true` + empty note → 400 `FOLLOW_UP_NOTE_REQUIRED`; `followUpRequired=false` + non-empty note → 201 with `followUpNote: null` (auto-clear, never 400) | Pass |
+| API-03 | API | AC-01 / BR-03 | Description/Result boundaries | 1–2000 chars accepted; empty/whitespace-only rejected (400) | Pass |
+| API-04 | API | BR-05 | Attachment Notes boundary and optionality | 0–500 chars accepted; omitted → stored as null; no Attachment record is created or referenced | Pass |
+| API-05 | API | AC-09 / BR-02 | Requester cannot create | Requester → 403; no record created | Pass |
+| API-06 | API | BR-02 | Staff member other than the Ticket Owner can create | Non-owner IT_STAFF creates successfully (200/201) | Pass |
+| API-07 | API | AC-08 / FR-04 | Requester can list (read-only) | 200; Requester on owned Ticket sees full list; cross-owner → 404 | Pass |
+| API-08 | API | FR-05 / BR-08 | List ordering | Returned oldest → newest by `actionAt` asc, tie-break `id` asc | Pass |
+| API-09 | API | AC-01 | Empty Ticket returns empty list | Ticket with zero Actions Taken → `{ "data": [] }`, not an error | Pass |
+| API-10 | API | AC-09 / BR-02 | Edit — role restriction | Requester → 403; IT_STAFF/ADMIN (including non-author) → 200 | Pass |
+| API-11 | API | BR-06, BR-07 | Edit preserves immutable fields | `performedById` and `createdAt` unchanged after edit; `actionAt` editable with revalidation; `updatedById`/`updatedAt` set to the editor | Pass |
+| API-12 | API | AC-07 / BR-12 | Stale-write rejected on edit | Submitting an outdated `version` → 409 `STALE_UPDATE` with current record in `details`; correct `version` → 200, `version` incremented | Pass |
+| API-13 | API | BR-04 | Edit re-validates follow-up conditional | Editing to `followUpRequired=true` without a note → 400, even if the record previously had `followUpRequired=false` | Pass |
+| API-37 | API | AC-13 / BR-06 | `actionAt` future rejected, past accepted | Future `actionAt` (>5 min / 300s ahead) → 400 `ACTION_AT_IN_FUTURE`; within +5 min or past → 201 and stored verbatim | Pass |
 | API-38 | API | AC-04, AC-05 / BR-10 | Gate keys off latest `actionAt` | Backdated action inserted after a newer one does not become the gate reference; latest by `actionAt` (tie highest `id`) decides | Planned |
 
 ### 2.2 Ticket Workflow and Resolution — `server/tests/lab-04/ticket-workflow.api.test.ts`
@@ -101,15 +101,15 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 | API-34 | API | FR-11 / BR-15 | Administrator sees queue metrics plus userCounts | ADMIN receives 200 with identical queue metrics plus `userCounts` matching hand-computed active-user counts; `IT_STAFF` response omits `userCounts` entirely (D-07) | Planned |
 | API-35 | API | FR-12 / safe failure | Safe 500 shape on dashboard/actions endpoints | Forced server error → 500 with `{ error: { message, code: INTERNAL_SERVER_ERROR } }`, no stack/technical detail leaked | Planned |
 | API-36 | API | FR-11 / BR-15 | `userCounts` counts active users only | Inactive users excluded from all three sub-counts; verified against seeded active/inactive mix | Planned |
-| API-39 | API | BR-02 / §5 Auth matrix | Inactive Staff denied on Lab 4 endpoints | Inactive `IT_STAFF` calling actions/dashboard endpoints → `403 ACCOUNT_INACTIVE` via global session guard; no record created | Planned |
+| API-39 | API | BR-02 / §5 Auth matrix | Inactive Staff denied on Lab 4 endpoints | Deactivated session → `401 UNAUTHORIZED` (session invalidated by `requireSession`); fresh login → `403 ACCOUNT_INACTIVE`; no record created | Pass |
 
 ### 2.5 Unit Tests — `server/tests/lab-04/`
 
 | Test ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
 | UNIT-01 | Unit | BR-10 | Resolution-gate evaluator | `(actionCount, latestByActionAtFollowUpRequired) → allowed/denied` for all 4 input combinations | Planned |
-| UNIT-02 | Unit | BR-12 | Optimistic-concurrency comparator | Matching version → proceed; mismatched → reject, no side effects | Planned |
-| UNIT-03 | Unit | BR-04 | Follow-up conditional validator | `true` + empty → fail; `true` + note → pass; `false` ± note → pass with note normalized to `null` | Planned |
+| UNIT-02 | Unit | BR-12 | Optimistic-concurrency comparator | Matching version → proceed; mismatched → reject, no side effects | Pass |
+| UNIT-03 | Unit | BR-04 | Follow-up conditional validator | `true` + empty → fail; `true` + note → pass; `false` ± note → pass with note normalized to `null` | Pass |
 | UNIT-04 | Unit | BR-14, BR-15 | Dashboard metric query builders | Given a mocked ticket set, each metric function returns the mathematically correct count (including `userCounts` per role) | Planned |
 | UNIT-05 | Unit | BR-06 | `actionAt` validator | Future beyond +5 min → reject; within tolerance/past/now → accept; invalid ISO → reject | Planned |
 
