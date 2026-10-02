@@ -32,6 +32,16 @@ import {
   isStaffRole,
 } from "./statusTransitions.js";
 import { validateContent } from "./contentValidation.js";
+import {
+  ACTION_TEXT_MAX_LENGTH,
+  ACTION_TEXT_MIN_LENGTH,
+  ATTACHMENT_NOTES_MAX_LENGTH,
+  isActionAtTooFarInFuture,
+  isStaleVersion,
+  normalizeFollowUpNote,
+  parseActionAt,
+  validateBoundedText,
+} from "./actionTakenRules.js";
 import { isValidEmail, normalizeEmail } from "./email.js";
 import {
   SESSION_COOKIE_NAME,
@@ -1552,6 +1562,432 @@ app.patch("/api/tickets/:ticketId", async (req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
+// Actions Taken (Lab 4, docs/lab-04/api-spec.md §4.1–§4.3, BR-01..BR-08)
+// POST /api/tickets/:ticketId/actions -> 201 { data: action }
+//   body: { actionAt (UTC ISO-8601, past or within +5min), description,
+//           result (1-2000 after trim), followUpRequired (boolean),
+//           followUpNote (required iff followUpRequired, else auto-cleared to
+//           null — never a 400), attachmentNotes (optional free text 0-500) }
+//   Only IT_STAFF/ADMIN on any Ticket (BR-02, not restricted to the owner);
+//   performedBy is always the session user (D-09). Missing/invalid Tickets are
+//   404 TICKET_NOT_FOUND. Future actionAt beyond tolerance is 400
+//   ACTION_AT_IN_FUTURE; all other field violations are 400 VALIDATION_ERROR.
+// ---------------------------------------------------------------------------
+app.post(
+  "/api/tickets/:ticketId/actions",
+  requireRole(UserRole.IT_STAFF, UserRole.ADMIN),
+  async (req: Request, res: Response) => {
+    try {
+      const user = req.sessionUser;
+      if (!user) {
+        return res.status(401).json({
+          error: { message: "Authentication required", code: "UNAUTHORIZED" },
+        });
+      }
+
+      const ticketId = Number(req.params.ticketId);
+      if (!Number.isInteger(ticketId) || ticketId <= 0) {
+        return res.status(404).json({
+          error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
+        });
+      }
+      const ticket = await getPrisma().ticket.findUnique({
+        where: { id: ticketId },
+        select: { id: true },
+      });
+      if (!ticket) {
+        return res.status(404).json({
+          error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
+        });
+      }
+
+      const body = req.body ?? {};
+      const details: Record<string, string> = {};
+
+      let actionAt: Date | undefined;
+      const parsedAt = parseActionAt(body.actionAt);
+      if (!parsedAt.ok) {
+        details.actionAt = parsedAt.message;
+      } else if (isActionAtTooFarInFuture(parsedAt.date)) {
+        return res.status(400).json({
+          error: {
+            message: "Action date/time cannot be in the future",
+            code: "ACTION_AT_IN_FUTURE",
+            details: {
+              actionAt:
+                "Action date/time must not be more than 5 minutes in the future",
+            },
+          },
+        });
+      } else {
+        actionAt = parsedAt.date;
+      }
+
+      const description = validateBoundedText(
+        body.description,
+        ACTION_TEXT_MIN_LENGTH,
+        ACTION_TEXT_MAX_LENGTH
+      );
+      if (!description.ok) {
+        details.description = description.message;
+      }
+      const result = validateBoundedText(
+        body.result,
+        ACTION_TEXT_MIN_LENGTH,
+        ACTION_TEXT_MAX_LENGTH
+      );
+      if (!result.ok) {
+        details.result = result.message;
+      }
+
+      if (typeof body.followUpRequired !== "boolean") {
+        details.followUpRequired = "Follow-Up Required must be a boolean";
+      }
+      let followUpNote: string | null = null;
+      if (typeof body.followUpRequired === "boolean") {
+        const normalized = normalizeFollowUpNote(
+          body.followUpRequired,
+          body.followUpNote
+        );
+        if ("error" in normalized) {
+          details.followUpNote = "Follow-up note is required when follow-up is needed";
+        } else {
+          followUpNote = normalized.note;
+        }
+      }
+
+      let attachmentNotes: string | null = null;
+      if (body.attachmentNotes !== undefined && body.attachmentNotes !== null) {
+        if (typeof body.attachmentNotes !== "string") {
+          details.attachmentNotes = "Attachment notes must be a string";
+        } else {
+          const trimmed = body.attachmentNotes.trim();
+          if (trimmed.length > ATTACHMENT_NOTES_MAX_LENGTH) {
+            details.attachmentNotes =
+              "Attachment notes must be at most 500 characters";
+          } else {
+            attachmentNotes = trimmed === "" ? null : trimmed;
+          }
+        }
+      }
+
+      if (Object.keys(details).length > 0) {
+        return res.status(400).json({
+          error: {
+            message: "Validation failed",
+            code: "VALIDATION_ERROR",
+            details,
+          },
+        });
+      }
+
+      const created = await getPrisma().actionTaken.create({
+        data: {
+          ticketId: ticket.id,
+          actionAt: actionAt!,
+          description: description.ok ? description.value : "",
+          result: result.ok ? result.value : "",
+          followUpRequired: body.followUpRequired,
+          followUpNote,
+          attachmentNotes,
+          performedById: user.id,
+        },
+        include: ACTION_TAKEN_INCLUDE,
+      });
+
+      res.status(201).json({ data: toActionTakenShape(created) });
+    } catch (err) {
+      console.error("Failed to create action taken:", err);
+      res.status(500).json({
+        error: {
+          message: "Failed to create action taken",
+          code: "INTERNAL_SERVER_ERROR",
+        },
+      });
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// GET /api/tickets/:ticketId/actions -> 200 { data: [action, ...] }
+// Ordered oldest work first (actionAt asc, id asc — BR-08); `{ data: [] }`
+// when the Ticket has no Actions Taken. The submitting Requester may read
+// their own Ticket; cross-owner Requester access is 404 (no existence leak,
+// same D-03 policy as comments).
+// ---------------------------------------------------------------------------
+app.get(
+  "/api/tickets/:ticketId/actions",
+  async (req: Request, res: Response) => {
+    try {
+      const user = req.sessionUser;
+      if (!user) {
+        return res.status(401).json({
+          error: { message: "Authentication required", code: "UNAUTHORIZED" },
+        });
+      }
+
+      const access = await resolveTicketAccess(req, res, user, {
+        allowStaff: true,
+      });
+      if (!access) return;
+
+      const actions = await getPrisma().actionTaken.findMany({
+        where: { ticketId: access.ticketId },
+        orderBy: [{ actionAt: "asc" }, { id: "asc" }],
+        include: ACTION_TAKEN_INCLUDE,
+      });
+
+      res.status(200).json({ data: actions.map(toActionTakenShape) });
+    } catch (err) {
+      console.error("Failed to fetch actions taken:", err);
+      res.status(500).json({
+        error: {
+          message: "Failed to fetch actions taken",
+          code: "INTERNAL_SERVER_ERROR",
+        },
+      });
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// PATCH /api/tickets/:ticketId/actions/:actionId -> 200 { data: action }
+// Edit an Action Taken (optimistic-concurrency protected). Only
+// IT_STAFF/ADMIN — any Staff member, not only the original author (BR-02,
+// BR-07). `version` is required and must equal the stored version, otherwise
+// 409 STALE_UPDATE carrying the current record so the client can refresh and
+// retry (BR-12). Field validation mirrors §4.1 for supplied fields; an edit
+// setting `followUpRequired: false` auto-clears the note (BR-04). Success
+// increments `version` by 1, sets `updatedBy` to the editor, and never changes
+// `performedBy` or `createdAt`.
+// Check order: 400 field/version-shape problems first, then 409 staleness.
+// ---------------------------------------------------------------------------
+app.patch(
+  "/api/tickets/:ticketId/actions/:actionId",
+  requireRole(UserRole.IT_STAFF, UserRole.ADMIN),
+  async (req: Request, res: Response) => {
+    try {
+      const user = req.sessionUser;
+      if (!user) {
+        return res.status(401).json({
+          error: { message: "Authentication required", code: "UNAUTHORIZED" },
+        });
+      }
+
+      const ticketId = Number(req.params.ticketId);
+      const actionId = Number(req.params.actionId);
+      if (
+        !Number.isInteger(ticketId) ||
+        ticketId <= 0 ||
+        !Number.isInteger(actionId) ||
+        actionId <= 0
+      ) {
+        return res.status(404).json({
+          error: { message: "Action Taken not found", code: "NOT_FOUND" },
+        });
+      }
+
+      const current = await getPrisma().actionTaken.findUnique({
+        where: { id: actionId },
+        include: ACTION_TAKEN_INCLUDE,
+      });
+      if (!current || current.ticketId !== ticketId) {
+        return res.status(404).json({
+          error: { message: "Action Taken not found", code: "NOT_FOUND" },
+        });
+      }
+
+      const body = req.body ?? {};
+      const details: Record<string, string> = {};
+
+      if (
+        body.version === undefined ||
+        body.version === null ||
+        !Number.isInteger(body.version)
+      ) {
+        details.version = "Version is required and must be an integer";
+      }
+
+      const EDITABLE = [
+        "actionAt",
+        "description",
+        "result",
+        "followUpRequired",
+        "followUpNote",
+        "attachmentNotes",
+      ] as const;
+      const supplied = EDITABLE.filter((f) => body[f] !== undefined);
+      if (supplied.length === 0) {
+        details.body = "At least one editable field must be provided";
+      }
+
+      let actionAt: Date | undefined;
+      if (body.actionAt !== undefined) {
+        const parsedAt = parseActionAt(body.actionAt);
+        if (!parsedAt.ok) {
+          details.actionAt = parsedAt.message;
+        } else if (isActionAtTooFarInFuture(parsedAt.date)) {
+          return res.status(400).json({
+            error: {
+              message: "Action date/time cannot be in the future",
+              code: "ACTION_AT_IN_FUTURE",
+              details: {
+                actionAt:
+                  "Action date/time must not be more than 5 minutes in the future",
+              },
+            },
+          });
+        } else {
+          actionAt = parsedAt.date;
+        }
+      }
+
+      let description: string | undefined;
+      if (body.description !== undefined) {
+        const validated = validateBoundedText(
+          body.description,
+          ACTION_TEXT_MIN_LENGTH,
+          ACTION_TEXT_MAX_LENGTH
+        );
+        if (!validated.ok) details.description = validated.message;
+        else description = validated.value;
+      }
+
+      let result: string | undefined;
+      if (body.result !== undefined) {
+        const validated = validateBoundedText(
+          body.result,
+          ACTION_TEXT_MIN_LENGTH,
+          ACTION_TEXT_MAX_LENGTH
+        );
+        if (!validated.ok) details.result = validated.message;
+        else result = validated.value;
+      }
+
+      let followUpRequired: boolean | undefined;
+      if (body.followUpRequired !== undefined) {
+        if (typeof body.followUpRequired !== "boolean") {
+          details.followUpRequired = "Follow-Up Required must be a boolean";
+        } else {
+          followUpRequired = body.followUpRequired;
+        }
+      }
+      // Effective flag after this edit (explicit value wins, otherwise the
+      // stored one). The note rule is evaluated against it.
+      const effectiveFollowUp =
+        followUpRequired ?? current.followUpRequired;
+      let followUpNote: string | null | undefined;
+      if (!effectiveFollowUp) {
+        followUpNote = null; // BR-04 auto-clear, even for a stale supplied note
+      } else if (body.followUpNote !== undefined) {
+        const normalized = normalizeFollowUpNote(true, body.followUpNote);
+        if ("error" in normalized) {
+          details.followUpNote =
+            "Follow-up note is required when follow-up is needed";
+        } else {
+          followUpNote = normalized.note;
+        }
+      } else if (
+        !current.followUpRequired ||
+        current.followUpNote == null
+      ) {
+        // Flipping false → true (or true with no stored note) without
+        // supplying a note leaves the record note-less: reject (API-13).
+        details.followUpNote =
+          "Follow-up note is required when follow-up is needed";
+      }
+
+      let attachmentNotes: string | null | undefined;
+      if (body.attachmentNotes !== undefined) {
+        if (
+          body.attachmentNotes !== null &&
+          typeof body.attachmentNotes !== "string"
+        ) {
+          details.attachmentNotes = "Attachment notes must be a string";
+        } else if (typeof body.attachmentNotes === "string") {
+          const trimmed = body.attachmentNotes.trim();
+          if (trimmed.length > ATTACHMENT_NOTES_MAX_LENGTH) {
+            details.attachmentNotes =
+              "Attachment notes must be at most 500 characters";
+          } else {
+            attachmentNotes = trimmed === "" ? null : trimmed;
+          }
+        } else {
+          attachmentNotes = null;
+        }
+      }
+
+      if (Object.keys(details).length > 0) {
+        return res.status(400).json({
+          error: {
+            message: "Validation failed",
+            code: "VALIDATION_ERROR",
+            details,
+          },
+        });
+      }
+
+      if (isStaleVersion(body.version, current.version)) {
+        return res.status(409).json({
+          error: {
+            message:
+              "This Action Taken was updated by someone else. Refresh and try again.",
+            code: "STALE_UPDATE",
+            details: { current: toActionTakenShape(current) },
+          },
+        });
+      }
+
+      // Conditional single-statement write: zero affected rows means a
+      // concurrent edit slipped in between the read and the write.
+      const updated = await getPrisma().actionTaken.updateMany({
+        where: { id: current.id, version: current.version },
+        data: {
+          ...(actionAt !== undefined ? { actionAt } : {}),
+          ...(description !== undefined ? { description } : {}),
+          ...(result !== undefined ? { result } : {}),
+          ...(followUpRequired !== undefined ? { followUpRequired } : {}),
+          ...(followUpNote !== undefined ? { followUpNote } : {}),
+          ...(attachmentNotes !== undefined ? { attachmentNotes } : {}),
+          updatedById: user.id,
+          version: current.version + 1,
+        },
+      });
+      if (updated.count === 0) {
+        const fresh = await getPrisma().actionTaken.findUnique({
+          where: { id: current.id },
+          include: ACTION_TAKEN_INCLUDE,
+        });
+        return res.status(409).json({
+          error: {
+            message:
+              "This Action Taken was updated by someone else. Refresh and try again.",
+            code: "STALE_UPDATE",
+            details: {
+              current: fresh ? toActionTakenShape(fresh) : null,
+            },
+          },
+        });
+      }
+
+      const refreshed = await getPrisma().actionTaken.findUnique({
+        where: { id: current.id },
+        include: ACTION_TAKEN_INCLUDE,
+      });
+      res.status(200).json({ data: toActionTakenShape(refreshed!) });
+    } catch (err) {
+      console.error("Failed to update action taken:", err);
+      res.status(500).json({
+        error: {
+          message: "Failed to update action taken",
+          code: "INTERNAL_SERVER_ERROR",
+        },
+      });
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
 // Claim an unassigned Ticket (FR-16 / AC-09 / BR-18)
 // POST /api/tickets/:ticketId/claim -> 200 { data: { ticketId, owner } }
 //   Only IT_STAFF/ADMIN. Already-assigned Tickets are rejected 409
@@ -2548,6 +2984,58 @@ function toCommentShape(comment: {
     author: { id: comment.author.id, name: comment.author.name },
     content: comment.content,
     createdAt: comment.createdAt,
+  };
+}
+
+// ActionTaken row shape shared by the Lab 4 actions endpoints
+// (docs/lab-04/api-spec.md §3): work time from `actionAt` (client-supplied),
+// audit time in `createdAt` (backend-set), actor in `performedBy`.
+const ACTION_TAKEN_INCLUDE = {
+  performedBy: { select: { id: true, name: true, role: true } },
+  updatedBy: { select: { id: true, name: true, role: true } },
+};
+
+// Serializes an ActionTaken row for API responses (api-spec §3). Never accepts
+// `performedBy` from the client — it is always the session user (D-09).
+function toActionTakenShape(action: {
+  id: number;
+  ticketId: number;
+  actionAt: Date;
+  description: string;
+  result: string;
+  followUpRequired: boolean;
+  followUpNote: string | null;
+  attachmentNotes: string | null;
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
+  performedBy: { id: number; name: string; role: UserRole };
+  updatedBy: { id: number; name: string; role: UserRole } | null;
+}) {
+  return {
+    id: action.id,
+    ticketId: action.ticketId,
+    actionAt: action.actionAt,
+    description: action.description,
+    result: action.result,
+    followUpRequired: action.followUpRequired,
+    followUpNote: action.followUpNote,
+    attachmentNotes: action.attachmentNotes,
+    performedBy: {
+      id: action.performedBy.id,
+      name: action.performedBy.name,
+      role: action.performedBy.role,
+    },
+    updatedBy: action.updatedBy
+      ? {
+          id: action.updatedBy.id,
+          name: action.updatedBy.name,
+          role: action.updatedBy.role,
+        }
+      : null,
+    version: action.version,
+    createdAt: action.createdAt,
+    updatedAt: action.updatedAt,
   };
 }
 

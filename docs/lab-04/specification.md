@@ -101,7 +101,7 @@ Roles: `REQUESTER`, `IT_STAFF`, `ADMIN`. Per the Lab 3 model, "Staff" = `IT_STAF
 | Requester Dashboard | Own data only | — | — |
 | IT Staff Dashboard | — | ✔ | ✔ |
 
-All other rows from the Lab 3 authorization matrix (login, tickets, comments, notes, attachments, user management) are unchanged and remain in force. Inactive users (`isActive = false`) are rejected on every authenticated endpoint with `403 ACCOUNT_INACTIVE` by the global session guard, so an inactive Staff member can neither create/edit Actions Taken nor call either dashboard.
+All other rows from the Lab 3 authorization matrix (login, tickets, comments, notes, attachments, user management) are unchanged and remain in force. Inactive users (`isActive = false`) cannot obtain a session (login → `403 ACCOUNT_INACTIVE`), and any existing session is invalidated at the next request (`401 UNAUTHORIZED` via `requireSession`), so an inactive Staff member can neither create/edit Actions Taken nor call either dashboard.
 
 ---
 
@@ -390,4 +390,4 @@ Full endpoint details are defined in [`api-spec.md`](./api-spec.md). Authoritati
 
 **D-11: Staff Quick Actions omits Create Ticket shown in the §8.1 figure.** `POST /api/tickets` remains `REQUESTER only` per the Lab 3 contract (api-spec §4.6), and FR-14/BR-20 require Lab 2/3 auth behavior to continue identically — allowing Staff to create Tickets would be a new product feature outside the Sprint 4 contract. The Staff Quick Actions therefore offers only queue views the role may access: Browse Unassigned, Search Tickets, My Queue (ui-spec §4). Requester Dashboard keeps its Create Ticket quick action unchanged.
 
-**D-12: PDF Parts 5/6/7 wording map (no new behavior).** Part 5 "current-user Actions Taken" = `My Assigned` + `My Recent Tickets` on the Staff Dashboard (no per-action dashboard strip by design). Part 6 "assign / complete / cancel / inactive-assignee" = Ticket-level assign/claim and status moves from Lab 3 (unchanged, FR-14/BR-20); Actions Taken itself is create/edit-only with no delete/complete/cancel state, and inactive users receive `403 ACCOUNT_INACTIVE`. Part 7 "append-only" = no deletion of Actions Taken, comments, or notes; edit is allowed with `version` + `updatedById` audit (BR-07/BR-12).
+**D-12: PDF Parts 5/6/7 wording map (no new behavior).** Part 5 "current-user Actions Taken" = `My Assigned` + `My Recent Tickets` on the Staff Dashboard (no per-action dashboard strip by design). Part 6 "assign / complete / cancel / inactive-assignee" = Ticket-level assign/claim and status moves from Lab 3 (unchanged, FR-14/BR-20); Actions Taken itself is create/edit-only with no delete/complete/cancel state, and inactive users are denied (existing session → `401`, login → `403 ACCOUNT_INACTIVE`). Part 7 "append-only" = no deletion of Actions Taken, comments, or notes; edit is allowed with `version` + `updatedById` audit (BR-07/BR-12).
