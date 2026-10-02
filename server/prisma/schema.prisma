@@ -88,6 +88,8 @@ model User {
   sessions         Session[]
   publicComments   PublicComment[]
   internalNotes    InternalNote[]
+  performedActions ActionTaken[]    @relation("performedActions")
+  updatedActions   ActionTaken[]    @relation("updatedActions")
 
   @@index([isActive])
   @@index([role])
@@ -132,6 +134,7 @@ model Ticket {
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   indicatedResolvedAt DateTime?
+  version           Int               @default(1)
 
   submitter       User             @relation("submittedTickets", fields: [submittedById], references: [id])
   owner           User?            @relation("ownedTickets", fields: [ownerId], references: [id])
@@ -140,6 +143,7 @@ model Ticket {
   attachments     Attachment[]
   publicComments  PublicComment[]
   internalNotes   InternalNote[]
+  actionsTaken    ActionTaken[]
 
   @@index([submittedById])
   @@index([ownerId])
@@ -196,6 +200,34 @@ model PublicComment {
   @@index([ticketId])
   @@index([ticketId, createdAt])
   @@map("public_comment")
+}
+
+// ---------------------------------------------------------------------------
+// Action Taken (Lab 4 §9.1; work log under one Ticket)
+// ---------------------------------------------------------------------------
+
+model ActionTaken {
+  id               Int       @id @default(autoincrement())
+  ticketId         Int
+  actionAt         DateTime
+  description      String
+  result           String
+  followUpRequired Boolean   @default(false)
+  followUpNote     String?
+  attachmentNotes  String?
+  performedById    Int
+  updatedById      Int?
+  version          Int       @default(1)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  ticket      Ticket @relation(fields: [ticketId], references: [id])
+  performedBy User   @relation("performedActions", fields: [performedById], references: [id])
+  updatedBy   User?  @relation("updatedActions", fields: [updatedById], references: [id])
+
+  @@index([ticketId])
+  @@index([ticketId, actionAt, id])
+  @@map("action_taken")
 }
 
 // ---------------------------------------------------------------------------
