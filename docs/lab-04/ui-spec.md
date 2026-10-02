@@ -195,6 +195,9 @@ All Lab 2/3 `data-testid` values remain. New Lab 4 targets:
 | `action-followup-toggle` / `action-followup-note-input` | Follow-up controls |
 | `action-attachment-notes-input` | Attachment Notes field |
 | `save-action-btn` | Save Action Taken |
+| `add-action-btn` | Add Action Taken (staff only; never rendered for Requesters) |
+| `action-conflict-banner` | 409 STALE_UPDATE banner above the form (`role="alert"`) |
+| `action-performer-static` | Performed By static text in edit mode |
 | `resolution-gate-hint` | Inline hint blocking premature Resolve |
 
 ---

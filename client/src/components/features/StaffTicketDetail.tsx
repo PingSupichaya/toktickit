@@ -22,6 +22,7 @@ import { Card } from "../ui/Card.js";
 import { ErrorState } from "../ui/ErrorState.js";
 import { Select } from "../ui/Select.js";
 import { Textarea } from "../ui/Textarea.js";
+import { ActionsTakenPanel } from "./ActionsTakenPanel.js";
 
 const PRIORITY_OPTIONS: { value: RequestedPriority; label: string }[] = [
   { value: "LOW", label: "LOW" },
@@ -29,7 +30,7 @@ const PRIORITY_OPTIONS: { value: RequestedPriority; label: string }[] = [
   { value: "HIGH", label: "HIGH" },
 ];
 
-type TabId = "comments" | "notes" | "attachments";
+type TabId = "comments" | "notes" | "actions" | "attachments";
 
 interface StaffTicketDetailProps {
   ticketId: number;
@@ -537,6 +538,19 @@ export function StaffTicketDetail({
             </button>
             <button
               type="button"
+              id="tab-actions"
+              role="tab"
+              className="detail-tabs__tab"
+              data-testid="tab-actions"
+              aria-selected={activeTab === "actions"}
+              aria-controls="panel-actions"
+              tabIndex={activeTab === "actions" ? 0 : -1}
+              onClick={() => setActiveTab("actions")}
+            >
+              Actions Taken
+            </button>
+            <button
+              type="button"
               id="tab-attachments"
               role="tab"
               className="detail-tabs__tab"
@@ -647,6 +661,18 @@ export function StaffTicketDetail({
                 </Button>
               </div>
             </div>
+          </div>
+
+          <div
+            id="panel-actions"
+            role="tabpanel"
+            aria-labelledby="tab-actions"
+            hidden={activeTab !== "actions"}
+            className="detail-tabs__panel"
+          >
+            {activeTab === "actions" && (
+              <ActionsTakenPanel ticketId={ticket.id} />
+            )}
           </div>
 
           <div
