@@ -19,6 +19,7 @@ import {
 import { Alert } from "../ui/Alert.js";
 import { Button } from "../ui/Button.js";
 import { Card } from "../ui/Card.js";
+import { ConflictBanner } from "../ui/ConflictBanner.js";
 import { ErrorState } from "../ui/ErrorState.js";
 import { Select } from "../ui/Select.js";
 import { Textarea } from "../ui/Textarea.js";
@@ -131,6 +132,7 @@ export function StaffTicketDetail({
   const [saveBusy, setSaveBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const [statusConflict, setStatusConflict] = useState<string | null>(null);
 
   // Comment / Note composer state.
   const [commentDraft, setCommentDraft] = useState("");
@@ -189,7 +191,16 @@ export function StaffTicketDetail({
   }, [eligibleOwners, ticket]);
 
   const transitions = ticket?.permittedStatusTransitions ?? [];
-  const statusOptions = transitions.map((s) => ({ value: s, label: s }));
+  // Lab 4 (ui-spec §7): RESOLVED stays listed when the matrix allows it, but
+  // is shown disabled with an inline hint while the gate is unsatisfied
+  // (`canResolve === false`). An unknown gate (older fixtures) never blocks.
+  const resolveBlocked =
+    transitions.includes("RESOLVED") && ticket?.canResolve === false;
+  const statusOptions = transitions.map((s) => ({
+    value: s,
+    label: s,
+    disabled: s === "RESOLVED" && resolveBlocked,
+  }));
 
   function applyOperational(data: TicketDetailData) {
     setTicket((prev) =>
@@ -242,6 +253,7 @@ export function StaffTicketDetail({
     setSaveBusy(true);
     setSaveError(null);
     setSaveSuccess(null);
+    setStatusConflict(null);
 
     const itPriorityChanged =
       itPrioritySel !== "" &&
@@ -253,7 +265,11 @@ export function StaffTicketDetail({
     try {
       let data: TicketDetailData = ticket;
       if (itPriorityChanged || statusChanged) {
+        // Lab 4 (§4.4): the version last read travels with the write; a
+        // 409 STALE_UPDATE refreshes the fields to the server's current
+        // values instead of silently overwriting them (ui-spec §7).
         data = await apiUpdateTicketOperational(ticket.id, {
+          version: ticket.version ?? 0,
           ...(itPriorityChanged
             ? { itPriority: itPrioritySel as RequestedPriority }
             : {}),
@@ -269,9 +285,22 @@ export function StaffTicketDetail({
       applyOperational(data);
       setSaveSuccess("Ticket updated.");
     } catch (err) {
-      setSaveError(
-        err instanceof Error ? err.message : "Failed to save changes"
-      );
+      const failure =
+        typeof err === "object" && err !== null
+          ? (err as { status?: number; code?: string; details?: { current?: TicketDetailData } })
+          : {};
+      if (failure.status === 409 && failure.code === "STALE_UPDATE") {
+        setStatusConflict(
+          "This Ticket was updated by someone else. The latest values have been loaded — please review and try again."
+        );
+        if (failure.details?.current) {
+          applyOperational(failure.details.current);
+        }
+      } else {
+        setSaveError(
+          err instanceof Error ? err.message : "Failed to save changes"
+        );
+      }
     } finally {
       setSaveBusy(false);
     }
@@ -475,12 +504,24 @@ export function StaffTicketDetail({
                 }
                 value={statusSel}
                 options={statusOptions}
+                describedBy={resolveBlocked ? "resolution-gate-hint" : undefined}
                 onChange={(v) => setStatusSel(v)}
               />
+              {resolveBlocked && (
+                <p
+                  className="field__hint"
+                  id="resolution-gate-hint"
+                  data-testid="resolution-gate-hint"
+                >
+                  Add an Action Taken with no outstanding follow-up before
+                  resolving.
+                </p>
+              )}
             </div>
           </div>
 
           <div className="staff-detail__actions-row">
+            {statusConflict && <ConflictBanner message={statusConflict} />}
             {saveError && (
               <Alert variant="error" role="alert" data-testid="save-error">
                 {saveError}

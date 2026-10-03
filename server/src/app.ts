@@ -37,6 +37,7 @@ import {
   ACTION_TEXT_MIN_LENGTH,
   ATTACHMENT_NOTES_MAX_LENGTH,
   isActionAtTooFarInFuture,
+  isResolutionGateSatisfied,
   isStaleVersion,
   normalizeFollowUpNote,
   parseActionAt,
@@ -84,15 +85,6 @@ class AlreadyIndicatedResolvedError extends Error {
 class TicketAlreadyAssignedError extends Error {
   constructor() {
     super("ticket is already assigned");
-  }
-}
-
-// Raised inside the PATCH transaction when the requested status move is not
-// permitted by the current-status matrix; mapped to 409
-// TICKET_STATUS_TRANSITION_NOT_ALLOWED (BR-43).
-class StatusTransitionNotAllowedError extends Error {
-  constructor() {
-    super("status transition is not allowed");
   }
 }
 
@@ -1411,7 +1403,9 @@ app.get("/api/tickets/:ticketId", async (req: Request, res: Response) => {
       });
     }
 
-    res.status(200).json({ data: toTicketDetail(ticket, user) });
+    res.status(200).json({
+      data: toTicketDetail(ticket, user, await getTicketGateInfo(ticket.id)),
+    });
   } catch (err) {
     console.error("Failed to fetch ticket:", err);
     res.status(500).json({
@@ -1424,13 +1418,18 @@ app.get("/api/tickets/:ticketId", async (req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
-// Ticket operational update (FR-17 / FR-18 / AC-11, AC-12, BR-19, BR-20)
+// Ticket operational update (Lab 4, docs/lab-04/api-spec.md §4.4; FR-17 /
+// FR-18 / AC-11, AC-12, BR-10, BR-12)
 // PATCH /api/tickets/:ticketId -> 200 { data: updated ticket }
-//   body: { itPriority?: LOW|MEDIUM|HIGH, currentStatus?: transition target }
-//   Only IT_STAFF/ADMIN. Status changes are validated against the CURRENT
-//   status read in the same transaction (BR-43); a disallowed move is 409
-//   TICKET_STATUS_TRANSITION_NOT_ALLOWED. Response mirrors §4.9 minus
-//   comments/notes for compactness.
+//   body: { version (required), itPriority?: LOW|MEDIUM|HIGH,
+//           currentStatus?: transition target }
+//   Only IT_STAFF/ADMIN. Evaluation order (api-spec §5): version match (409
+//   STALE_UPDATE) → transition-matrix legality (409
+//   TICKET_STATUS_TRANSITION_NOT_ALLOWED) → resolution gate for RESOLVED
+//   (422 RESOLUTION_NOT_ALLOWED) → commit. The write is a single conditional
+//   statement (UPDATE ... WHERE id = ? AND version = ?); version increments
+//   by exactly 1 (D-01). Response mirrors §4.9 minus comments/notes, plus the
+//   Lab 4 fields (version, canResolve, actionCount, hasOutstandingFollowUp).
 // ---------------------------------------------------------------------------
 app.patch("/api/tickets/:ticketId", async (req: Request, res: Response) => {
   try {
@@ -1458,6 +1457,13 @@ app.patch("/api/tickets/:ticketId", async (req: Request, res: Response) => {
 
     const body = req.body ?? {};
     const details: Record<string, string> = {};
+    if (
+      body.version === undefined ||
+      body.version === null ||
+      !Number.isInteger(body.version)
+    ) {
+      details.version = "Version is required and must be an integer";
+    }
     let itPriority: RequestedPriority | undefined;
     if (body.itPriority !== undefined && body.itPriority !== null) {
       if (PRIORITIES.includes(body.itPriority as RequestedPriority)) {
@@ -1497,59 +1503,84 @@ app.patch("/api/tickets/:ticketId", async (req: Request, res: Response) => {
     }
 
     const db = getPrisma();
-    try {
-      await db.$transaction(async (tx) => {
-        const current = await tx.ticket.findUniqueOrThrow({
-          where: { id: ticketId },
-          select: { currentStatus: true },
-        });
-        if (
-          nextStatus !== undefined &&
-          !canTransition(current.currentStatus, nextStatus, user.role)
-        ) {
-          throw new StatusTransitionNotAllowedError();
-        }
-        await tx.ticket.update({
-          where: { id: ticketId },
-          data: {
-            ...(itPriority !== undefined ? { itPriority } : {}),
-            ...(nextStatus !== undefined ? { currentStatus: nextStatus } : {}),
-          },
-        });
-      });
-    } catch (err) {
-      if (err instanceof StatusTransitionNotAllowedError) {
-        return res.status(409).json({
-          error: {
-            message: "This status transition is not allowed",
-            code: "TICKET_STATUS_TRANSITION_NOT_ALLOWED",
-          },
-        });
-      }
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === "P2025"
-      ) {
-        return res.status(404).json({
-          error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
-        });
-      }
-      throw err;
-    }
-
-    const updated = await db.ticket.findUnique({
+    const current = await db.ticket.findUnique({
       where: { id: ticketId },
-      include: TICKET_DETAIL_INCLUDE,
+      select: { id: true, currentStatus: true, version: true },
     });
-    if (!updated) {
+    if (!current) {
       return res.status(404).json({
         error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
       });
     }
-    const data = toTicketDetail(updated, user);
-    delete data.comments;
-    delete data.notes;
-    res.status(200).json({ data });
+
+    // (2) Version match — checked before transition legality (API-22).
+    if (isStaleVersion(body.version, current.version)) {
+      return res.status(409).json({
+        error: {
+          message:
+            "This Ticket was updated by someone else. Refresh and try again.",
+          code: "STALE_UPDATE",
+          details: {
+            current: await ticketOperationalShape(ticketId, user),
+          },
+        },
+      });
+    }
+
+    // (3) Transition-matrix legality (matrix alone; the gate follows).
+    if (
+      nextStatus !== undefined &&
+      !canTransition(current.currentStatus, nextStatus, user.role)
+    ) {
+      return res.status(409).json({
+        error: {
+          message: "This status transition is not allowed",
+          code: "TICKET_STATUS_TRANSITION_NOT_ALLOWED",
+        },
+      });
+    }
+
+    // (4) Resolution gate, only when the target is RESOLVED (BR-10).
+    if (nextStatus === "RESOLVED") {
+      const gate = await getTicketGateInfo(ticketId);
+      if (!isResolutionGateSatisfied(gate.actionCount, gate.latestFollowUpRequired)) {
+        return res.status(422).json({
+          error: {
+            message:
+              "This Ticket cannot be resolved yet — add an Action Taken with no outstanding follow-up first.",
+            code: "RESOLUTION_NOT_ALLOWED",
+            details: {},
+          },
+        });
+      }
+    }
+
+    // (5) Commit as a single conditional statement; zero affected rows means
+    // a concurrent write slipped in between the read and the write.
+    const written = await db.ticket.updateMany({
+      where: { id: ticketId, version: current.version },
+      data: {
+        ...(itPriority !== undefined ? { itPriority } : {}),
+        ...(nextStatus !== undefined ? { currentStatus: nextStatus } : {}),
+        version: current.version + 1,
+      },
+    });
+    if (written.count === 0) {
+      return res.status(409).json({
+        error: {
+          message:
+            "This Ticket was updated by someone else. Refresh and try again.",
+          code: "STALE_UPDATE",
+          details: {
+            current: await ticketOperationalShape(ticketId, user),
+          },
+        },
+      });
+    }
+
+    res.status(200).json({
+      data: await ticketOperationalShape(ticketId, user),
+    });
   } catch (err) {
     console.error("Failed to update ticket:", err);
     res.status(500).json({
@@ -3075,13 +3106,18 @@ type TicketDetailRow = Prisma.TicketGetPayload<{
 // Viewer-aware detail serializer: Internal Notes are present only for
 // IT_STAFF/ADMIN; canIndicateResolved only for the submitting Requester;
 // permittedStatusTransitions derives from the transition matrix (§5.3).
+// Lab 4 fields (api-spec §3): `version`, `actionCount`,
+// `hasOutstandingFollowUp`, and `canResolve` (gate satisfied per BR-10,
+// independent of whether RESOLVED is currently a legal transition).
 function toTicketDetail(
   ticket: TicketDetailRow,
-  viewer: { id: number; role: UserRole }
+  viewer: { id: number; role: UserRole },
+  gate: { actionCount: number; latestFollowUpRequired: boolean | null }
 ): Record<string, unknown> {
   const isStaff = isStaffRole(viewer.role);
   const data: Record<string, unknown> = {
     ...ticket,
+    version: ticket.version,
     canIndicateResolved:
       viewer.role === UserRole.REQUESTER &&
       ticket.submittedById === viewer.id &&
@@ -3091,6 +3127,13 @@ function toTicketDetail(
       ticket.currentStatus,
       viewer.role
     ),
+    actionCount: gate.actionCount,
+    hasOutstandingFollowUp:
+      gate.actionCount > 0 && gate.latestFollowUpRequired === true,
+    canResolve: isResolutionGateSatisfied(
+      gate.actionCount,
+      gate.latestFollowUpRequired
+    ),
     comments: ticket.publicComments.map(toCommentShape),
   };
   delete data.publicComments;
@@ -3099,6 +3142,45 @@ function toTicketDetail(
     data.notes = ticket.internalNotes.map(toCommentShape);
   }
   delete data.internalNotes;
+  return data;
+}
+
+// BR-10 gate inputs for one Ticket: total Actions Taken plus the
+// follow-up flag of the latest entry by (actionAt, id) — the only entry the
+// resolution gate looks at.
+async function getTicketGateInfo(ticketId: number): Promise<{
+  actionCount: number;
+  latestFollowUpRequired: boolean | null;
+}> {
+  const db = getPrisma();
+  const [actionCount, latest] = await Promise.all([
+    db.actionTaken.count({ where: { ticketId } }),
+    db.actionTaken.findFirst({
+      where: { ticketId },
+      orderBy: [{ actionAt: "desc" }, { id: "desc" }],
+      select: { followUpRequired: true },
+    }),
+  ]);
+  return {
+    actionCount,
+    latestFollowUpRequired: latest ? latest.followUpRequired : null,
+  };
+}
+
+// Compact Ticket shape for PATCH responses and 409 STALE_UPDATE details:
+// full detail minus comments/notes, plus the Lab 4 gate fields (§4.4).
+async function ticketOperationalShape(
+  ticketId: number,
+  viewer: { id: number; role: UserRole }
+): Promise<Record<string, unknown> | null> {
+  const ticket = await getPrisma().ticket.findUnique({
+    where: { id: ticketId },
+    include: TICKET_DETAIL_INCLUDE,
+  });
+  if (!ticket) return null;
+  const data = toTicketDetail(ticket, viewer, await getTicketGateInfo(ticketId));
+  delete data.comments;
+  delete data.notes;
   return data;
 }
 

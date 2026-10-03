@@ -96,3 +96,21 @@ export function isActionAtTooFarInFuture(
 export function isStaleVersion(submitted: unknown, current: number): boolean {
   return submitted !== current;
 }
+
+export interface TicketGateInfo {
+  actionCount: number;
+  // Whether the most recent Action Taken (by actionAt, tie-break highest id)
+  // still has an outstanding follow-up. False when there are no actions.
+  hasOutstandingFollowUp: boolean;
+}
+
+// BR-10 resolution-gate evaluator: a Ticket may transition to RESOLVED only
+// with ≥1 Action Taken whose latest entry has no outstanding follow-up.
+// `latestFollowUpRequired` is null when the Ticket has no actions.
+export function isResolutionGateSatisfied(
+  actionCount: number,
+  latestFollowUpRequired: boolean | null
+): boolean {
+  if (actionCount < 1) return false;
+  return latestFollowUpRequired === false;
+}

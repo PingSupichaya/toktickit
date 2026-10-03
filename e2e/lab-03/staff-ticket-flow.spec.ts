@@ -285,6 +285,28 @@ test("E2E-05 visibility and resolution indicator", async ({ page }) => {
   await expect(
     page.locator(`tr[aria-label="Open ticket ${FLOW_TICKET}"]`)
   ).toBeVisible({ timeout: 10000 });
+  // Lab 4 gate: RESOLVED needs a qualifying Action Taken. Record one via the
+  // API (same session cookies) before the walk; the fixture removes it after.
+  const queueRes = await page.request.get(`${API}/api/tickets/queue`, {
+    params: { search: FLOW_SEARCH },
+  });
+  const queueBody = await queueRes.json();
+  const flowTicket = queueBody.data.find(
+    (t: { ticketNumber: string }) => t.ticketNumber === FLOW_TICKET
+  );
+  const actionRes = await page.request.post(
+    `${API}/api/tickets/${flowTicket.id}/actions`,
+    {
+      headers: { Origin: ORIGIN_5174 },
+      data: {
+        actionAt: new Date().toISOString(),
+        description: `${MARKER} Keyboard issue investigated.`,
+        result: "Driver fault confirmed; fix in progress.",
+        followUpRequired: false,
+      },
+    }
+  );
+  expect(actionRes.status()).toBe(201);
   await openQueueTicket(page, FLOW_TICKET);
   await page.locator('[data-testid="comment-textarea"]').fill(COMMENT_FLOW);
   await page.locator('[data-testid="post-comment-btn"]').click();

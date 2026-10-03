@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isResolutionGateSatisfied,
   isStaleVersion,
   normalizeFollowUpNote,
 } from "../../src/actionTakenRules.js";
@@ -59,8 +60,24 @@ describe("UNIT-03 — follow-up conditional validator (BR-04)", () => {
   });
 });
 
+describe("UNIT-01 — resolution-gate evaluator (BR-10)", () => {
+  it("denies with zero actions regardless of the latest flag", () => {
+    expect(isResolutionGateSatisfied(0, null)).toBe(false);
+    expect(isResolutionGateSatisfied(0, false)).toBe(false);
+  });
+
+  it("denies when the latest action needs follow-up", () => {
+    expect(isResolutionGateSatisfied(1, true)).toBe(false);
+    expect(isResolutionGateSatisfied(3, true)).toBe(false);
+  });
+
+  it("allows with ≥1 action and a clean latest entry", () => {
+    expect(isResolutionGateSatisfied(1, false)).toBe(true);
+    expect(isResolutionGateSatisfied(4, false)).toBe(true);
+  });
+});
+
 describe.skip("Lab 4 validators unit contract (other issues)", () => {
-  it.todo("UNIT-01 resolution-gate evaluator: 4 input combinations");
   it.todo("UNIT-04 metric builders incl. userCounts per role");
   it.todo("UNIT-05 actionAt validator: future beyond +5 min rejects, else accepts");
 });
