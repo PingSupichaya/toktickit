@@ -68,15 +68,15 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 
 | Test ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
-| API-14 | API | AC-03 / BR-10 | Resolve with zero Actions Taken | 422 `RESOLUTION_NOT_ALLOWED`; status unchanged | Planned |
-| API-15 | API | AC-04 / BR-10 | Resolve with outstanding follow-up on latest action | Latest Action Taken has `followUpRequired=true` → 422 `RESOLUTION_NOT_ALLOWED` | Planned |
-| API-16 | API | AC-05 / BR-10 | Resolve when gate satisfied | ≥1 Action Taken, latest has `followUpRequired=false` → 200, status = RESOLVED | Planned |
-| API-17 | API | BR-10 | Gate looks only at the most recent action | Ticket has an earlier action with `followUpRequired=true` followed by a later action with `followUpRequired=false` → resolution succeeds | Planned |
-| API-18 | API | FR-06 / §7 matrix | Full transition matrix — permitted moves | Every positive transition in `specification.md` §7 persists | Planned |
-| API-19 | API | FR-06 / §7 matrix | Full transition matrix — rejected moves | Every disallowed pair (e.g. NEW→CLOSED, CANCELLED→OPEN) → 409 `TICKET_STATUS_TRANSITION_NOT_ALLOWED` | Planned |
-| API-20 | API | AC-07 / BR-12 | Stale-write on Ticket status/priority/owner update | Outdated `version` → 409 `STALE_UPDATE`; correct `version` → 200, `version` incremented | Planned |
-| API-21 | API | BR-10, BR-13 | Requester "Problem Appears Resolved" unaffected by the gate | Indicator call succeeds regardless of Action Taken state and never changes status (Lab 3 behavior unchanged) | Planned |
-| API-22 | API | BR-11 | Evaluation order | Stale version alongside an invalid target status → `STALE_UPDATE` reported (version checked before transition legality), per api-spec §5 | Planned |
+| API-14 | API | AC-03 / BR-10 | Resolve with zero Actions Taken | 422 `RESOLUTION_NOT_ALLOWED`; status unchanged | Pass |
+| API-15 | API | AC-04 / BR-10 | Resolve with outstanding follow-up on latest action | Latest Action Taken has `followUpRequired=true` → 422 `RESOLUTION_NOT_ALLOWED` | Pass |
+| API-16 | API | AC-05 / BR-10 | Resolve when gate satisfied | ≥1 Action Taken, latest has `followUpRequired=false` → 200, status = RESOLVED | Pass |
+| API-17 | API | BR-10 | Gate looks only at the most recent action | Ticket has an earlier action with `followUpRequired=true` followed by a later action with `followUpRequired=false` → resolution succeeds | Pass |
+| API-18 | API | FR-06 / §7 matrix | Full transition matrix — permitted moves | Every positive transition in `specification.md` §7 persists | Pass |
+| API-19 | API | FR-06 / §7 matrix | Full transition matrix — rejected moves | Every disallowed pair (e.g. NEW→CLOSED, CANCELLED→OPEN) → 409 `TICKET_STATUS_TRANSITION_NOT_ALLOWED` | Pass |
+| API-20 | API | AC-07 / BR-12 | Stale-write on Ticket status/priority/owner update | Outdated `version` → 409 `STALE_UPDATE`; correct `version` → 200, `version` incremented | Pass |
+| API-21 | API | BR-10, BR-13 | Requester "Problem Appears Resolved" unaffected by the gate | Indicator call succeeds regardless of Action Taken state and never changes status (Lab 3 behavior unchanged) | Pass |
+| API-22 | API | BR-11 | Evaluation order | Stale version alongside an invalid target status → `STALE_UPDATE` reported (version checked before transition legality), per api-spec §5 | Pass |
 
 ### 2.3 Requester Dashboard — `server/tests/lab-04/requester-dashboard.api.test.ts`
 
@@ -107,7 +107,7 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 
 | Test ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
-| UNIT-01 | Unit | BR-10 | Resolution-gate evaluator | `(actionCount, latestByActionAtFollowUpRequired) → allowed/denied` for all 4 input combinations | Planned |
+| UNIT-01 | Unit | BR-10 | Resolution-gate evaluator | `(actionCount, latestByActionAtFollowUpRequired) → allowed/denied` for all 4 input combinations | Pass |
 | UNIT-02 | Unit | BR-12 | Optimistic-concurrency comparator | Matching version → proceed; mismatched → reject, no side effects | Pass |
 | UNIT-03 | Unit | BR-04 | Follow-up conditional validator | `true` + empty → fail; `true` + note → pass; `false` ± note → pass with note normalized to `null` | Pass |
 | UNIT-04 | Unit | BR-14, BR-15 | Dashboard metric query builders | Given a mocked ticket set, each metric function returns the mathematically correct count (including `userCounts` per role) | Planned |

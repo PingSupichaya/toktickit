@@ -135,6 +135,13 @@ export interface TicketDetail extends Ticket {
   notes?: PublicComment[];
   canIndicateResolved?: boolean;
   permittedStatusTransitions?: TicketStatus[];
+  // Lab 4 (§4.7): optimistic-concurrency version plus resolution-gate helpers.
+  // Optional so pre-Lab-4 fixtures keep typechecking; the server always sends
+  // them and the Lab 4 UI treats a missing version as unsavable.
+  version?: number;
+  canResolve?: boolean;
+  actionCount?: number;
+  hasOutstandingFollowUp?: boolean;
 }
 
 export interface TicketSummary {
@@ -654,6 +661,9 @@ export interface AssignOwnerResult {
 }
 
 export interface OperationalUpdateInput {
+  // Lab 4 (§4.4): the version last read; the server rejects stale writes with
+  // 409 STALE_UPDATE carrying the current Ticket for refresh-and-retry.
+  version: number;
   itPriority?: RequestedPriority;
   currentStatus?: TicketStatus;
 }

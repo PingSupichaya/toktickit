@@ -35,6 +35,7 @@ const ticket: TicketDetail = {
   attachments: [],
   comments: [],
   notes: [],
+  version: 1,
   canIndicateResolved: false,
   permittedStatusTransitions: [
     "IN_PROGRESS",
@@ -176,6 +177,7 @@ describe("StaffTicketDetail (UI-07)", () => {
 
     await waitFor(() =>
       expect(api.updateTicketOperational).toHaveBeenCalledWith(42, {
+        version: 1,
         itPriority: "HIGH",
       })
     );
@@ -197,6 +199,7 @@ describe("StaffTicketDetail (UI-07)", () => {
 
     await waitFor(() =>
       expect(api.updateTicketOperational).toHaveBeenCalledWith(42, {
+        version: 1,
         currentStatus: "RESOLVED",
       })
     );

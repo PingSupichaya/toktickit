@@ -45,6 +45,9 @@ async function main() {
         ownerId: null,
         itPriority: RequestedPriority.HIGH,
         indicatedResolvedAt: null,
+        // Lab 4: PATCH bumps version on every write — restore the seed value
+        // so MIG-01 (version = 1) holds after E2E runs.
+        version: 1,
       },
     });
   }
@@ -57,6 +60,12 @@ async function main() {
     await prisma.internalNote.deleteMany({
       where: { ticketId: flowId, content: { startsWith: MARKER } },
     });
+    // Lab 4: the E2E-05 walk now records a gate-qualifying Action Taken
+    // before resolving — remove only this suite's rows (seeded actions on
+    // other tickets are never touched).
+    await prisma.actionTaken.deleteMany({
+      where: { ticketId: flowId, description: { startsWith: MARKER } },
+    });
     await prisma.ticket.update({
       where: { id: flowId },
       data: {
@@ -64,6 +73,8 @@ async function main() {
         ownerId: omar.id,
         itPriority: RequestedPriority.MEDIUM,
         indicatedResolvedAt: null,
+        // Lab 4: see CLAIM_TICKET note above — E2E-05 walks bump the version.
+        version: 1,
       },
     });
   }
