@@ -786,3 +786,79 @@ export async function resetUserInitialPassword(
     body: JSON.stringify({ newPassword }),
   });
 }
+
+// ---------------------------------------------------------------------------
+// Lab 4 — Actions Taken (FR-01..FR-05 / api-spec §3–§4.3).
+// ---------------------------------------------------------------------------
+
+// Row shape of every Actions Taken response (api-spec §3): the work time is
+// `actionAt` (client-supplied); `createdAt` is the backend audit timestamp.
+export interface ActionTaken {
+  id: number;
+  ticketId: number;
+  actionAt: string;
+  description: string;
+  result: string;
+  followUpRequired: boolean;
+  followUpNote: string | null;
+  attachmentNotes: string | null;
+  performedBy: { id: number; name: string; role: UserRole };
+  updatedBy: { id: number; name: string; role: UserRole } | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateActionTakenInput {
+  actionAt: string;
+  description: string;
+  result: string;
+  followUpRequired: boolean;
+  followUpNote?: string | null;
+  attachmentNotes?: string | null;
+}
+
+export interface UpdateActionTakenInput {
+  version: number;
+  actionAt?: string;
+  description?: string;
+  result?: string;
+  followUpRequired?: boolean;
+  followUpNote?: string | null;
+  attachmentNotes?: string | null;
+}
+
+// FR-05 / BR-08 — list all Actions Taken for a Ticket, oldest work first.
+// The submitting Requester may read their own Ticket; staff may read any.
+export async function fetchActionsTaken(
+  ticketId: number
+): Promise<ActionTaken[]> {
+  return authJson<ActionTaken[]>(`/api/tickets/${ticketId}/actions`);
+}
+
+// FR-01 / FR-02 — create an Action Taken (IT_STAFF/ADMIN on any Ticket).
+export async function createActionTaken(
+  ticketId: number,
+  input: CreateActionTakenInput
+): Promise<ActionTaken> {
+  return authJson<ActionTaken>(`/api/tickets/${ticketId}/actions`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+// FR-03 — edit an Action Taken (optimistic concurrency: 409 STALE_UPDATE
+// carries the current record in error.details.current).
+export async function updateActionTaken(
+  ticketId: number,
+  actionId: number,
+  input: UpdateActionTakenInput
+): Promise<ActionTaken> {
+  return authJson<ActionTaken>(
+    `/api/tickets/${ticketId}/actions/${actionId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }
+  );
+}
