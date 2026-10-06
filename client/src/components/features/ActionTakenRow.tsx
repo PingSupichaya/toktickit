@@ -29,7 +29,7 @@ export function ActionTakenRow({ action, onEdit }: ActionTakenRowProps) {
           data-testid={`action-datetime-${action.id}`}
         >
           {formatActionDateTime(action.actionAt)}
-        </span>
+        </span>{" "}
         <span className="action-row__performer">
           {action.performedBy.name}{" "}
           <RoleBadge role={action.performedBy.role} />
@@ -46,8 +46,14 @@ export function ActionTakenRow({ action, onEdit }: ActionTakenRowProps) {
           </button>
         )}
       </div>
-      <p className="action-row__description">{action.description}</p>
-      <p className="action-row__result">{action.result}</p>
+      <p className="action-row__description">
+        <span className="action-row__label">Action: </span>
+        {action.description}
+      </p>
+      <p className="action-row__result">
+        <span className="action-row__label">Result: </span>
+        {action.result}
+      </p>
       {action.followUpRequired && (
         <div className="action-row__followup">
           <span className="badge badge--warning">Follow-up required</span>

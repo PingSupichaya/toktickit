@@ -161,7 +161,9 @@ export interface TicketQuery {
   search?: string;
   categoryId?: number;
   relatedSystemId?: number;
-  status?: string;
+  // Lab 4 drill-down (§4.5): a single status behaves as before; an array is
+  // sent as repeated `status` params matching any listed status.
+  status?: string | string[];
   priority?: RequestedPriority;
   sortBy?: "ticketDate" | "ticketNumber";
   sortOrder?: "asc" | "desc";
@@ -328,7 +330,10 @@ export async function fetchTickets(query: TicketQuery): Promise<TicketPage> {
   if (query.search) params.set("search", query.search);
   if (query.categoryId !== undefined) params.set("categoryId", String(query.categoryId));
   if (query.relatedSystemId !== undefined) params.set("relatedSystemId", String(query.relatedSystemId));
-  if (query.status) params.set("status", query.status);
+  if (query.status) {
+    const statuses = Array.isArray(query.status) ? query.status : [query.status];
+    for (const s of statuses) params.append("status", s);
+  }
   if (query.priority) params.set("priority", query.priority);
   if (query.sortBy) params.set("sortBy", query.sortBy);
   if (query.sortOrder) params.set("sortOrder", query.sortOrder);
@@ -871,4 +876,43 @@ export async function updateActionTaken(
       body: JSON.stringify(input),
     }
   );
+}
+
+// ---------------------------------------------------------------------------
+// Lab 4 — Requester Dashboard (FR-10 / api-spec §4.5, BR-14).
+// ---------------------------------------------------------------------------
+
+// Metric drill-down targets (api-spec §4.5): the status groups behind each
+// Requester Dashboard card. `null` means the unfiltered My Tickets view.
+export const REQUESTER_OPEN_STATUSES = [
+  "NEW",
+  "OPEN",
+  "IN_PROGRESS",
+  "REOPENED",
+] as const;
+
+export interface RequesterDashboardMetrics {
+  myOpenTickets: number;
+  waitingOnYou: number;
+  resolved: number;
+  closed: number;
+}
+
+export interface DashboardRecentTicket {
+  id: number;
+  ticketNumber: string;
+  summary: string;
+  currentStatus: string;
+  updatedAt: string;
+}
+
+export interface RequesterDashboardData {
+  metrics: RequesterDashboardMetrics;
+  recentTickets: DashboardRecentTicket[];
+}
+
+// FR-10 — summarize only the caller's own Tickets plus the 5 most recently
+// updated ones. Zero tickets yields zeroed metrics and an empty list (AC-11).
+export async function fetchRequesterDashboard(): Promise<RequesterDashboardData> {
+  return authJson<RequesterDashboardData>("/api/dashboard/requester");
 }

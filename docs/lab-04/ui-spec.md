@@ -187,6 +187,8 @@ All Lab 2/3 `data-testid` values remain. New Lab 4 targets:
 | `action-datetime-input` | Action Date/Time datetime-local picker |
 | `staff-recent-tickets` / `requester-recent-tickets` | Recent Tickets list card |
 | `staff-quick-actions` / `requester-quick-actions` | Quick Actions card |
+| `recent-view-all-link` | Recent Tickets "View all" drill-down link |
+| `dashboard-filter-chip` / `dashboard-filter-clear` | My Tickets dashboard-preset chip and its Clear action |
 | `tab-actions` | Actions Taken tab (Staff Ticket Detail) |
 | `actions-taken-readonly` | Actions Taken read-only card (Requester Ticket Detail) |
 | `actions-taken-empty` | Actions Taken empty state |

@@ -97,6 +97,11 @@ async function openMyTickets() {
       "Alice Johnson"
     );
   });
+  // Lab 4: Requesters land on the Dashboard — open My Tickets via the nav.
+  await user.click(screen.getByRole("button", { name: "My Tickets" }));
+  await waitFor(() => {
+    expect(screen.getByTestId("ticket-count")).toBeInTheDocument();
+  });
 }
 
 async function pickOption(testId: string, listboxName: string, label: string) {

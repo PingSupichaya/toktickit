@@ -1198,13 +1198,23 @@ app.get(
       }
     }
 
-    let status: TicketStatus | undefined;
+    // Lab 4 drill-down (§4.5): repeated `status` params filter to any of the
+    // given statuses. A single value behaves exactly as before.
+    let statuses: TicketStatus[] | undefined;
     if (q.status !== undefined && q.status !== "") {
-      if (STATUSES.includes(q.status as TicketStatus)) {
-        status = q.status as TicketStatus;
-      } else {
-        details.status =
-          'Status must be "NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "RESOLVED", "CLOSED", "REOPENED", or "CANCELLED"';
+      const raw = Array.isArray(q.status) ? q.status : [q.status];
+      const parsed: TicketStatus[] = [];
+      for (const value of raw) {
+        if (typeof value === "string" && STATUSES.includes(value as TicketStatus)) {
+          parsed.push(value as TicketStatus);
+        } else {
+          details.status =
+            'Status must be "NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "RESOLVED", "CLOSED", "REOPENED", or "CANCELLED"';
+          break;
+        }
+      }
+      if (parsed.length > 0 && Object.keys(details).length === 0) {
+        statuses = parsed;
       }
     }
 
@@ -1230,7 +1240,7 @@ app.get(
     const where: Prisma.TicketWhereInput = { submittedById: requesterId };
     if (categoryId !== undefined) where.categoryId = categoryId;
     if (relatedSystemId !== undefined) where.relatedSystemId = relatedSystemId;
-    if (status !== undefined) where.currentStatus = status;
+    if (statuses !== undefined) where.currentStatus = { in: statuses };
     if (priority !== undefined) where.requestedPriority = priority;
 
     if (typeof q.search === "string" && q.search.trim() !== "") {
@@ -1318,6 +1328,74 @@ app.get(
     });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Requester Dashboard (Lab 4, docs/lab-04/api-spec.md §4.5, BR-14).
+// GET /api/dashboard/requester -> 200 { data: { metrics, recentTickets } }
+// Metrics count ONLY the caller's own Tickets (submittedById = session user):
+// myOpenTickets (NEW/OPEN/IN_PROGRESS/REOPENED), waitingOnYou
+// (WAITING_FOR_REQUESTER), resolved, closed. recentTickets is the 5 most
+// recently updated owned Tickets (updatedAt desc), [] when none — never an
+// error (AC-11). Computed live per request (BR-16, FR-12).
+// ---------------------------------------------------------------------------
+app.get(
+  "/api/dashboard/requester",
+  requireRole(UserRole.REQUESTER),
+  async (req: Request, res: Response) => {
+    try {
+      const user = req.sessionUser;
+      if (!user) {
+        return res.status(401).json({
+          error: { message: "Authentication required", code: "UNAUTHORIZED" },
+        });
+      }
+
+      const db = getPrisma();
+      const own = { submittedById: user.id };
+      const [myOpenTickets, waitingOnYou, resolved, closed, recent] =
+        await Promise.all([
+          db.ticket.count({
+            where: {
+              ...own,
+              currentStatus: { in: ["NEW", "OPEN", "IN_PROGRESS", "REOPENED"] },
+            },
+          }),
+          db.ticket.count({
+            where: { ...own, currentStatus: "WAITING_FOR_REQUESTER" },
+          }),
+          db.ticket.count({ where: { ...own, currentStatus: "RESOLVED" } }),
+          db.ticket.count({ where: { ...own, currentStatus: "CLOSED" } }),
+          db.ticket.findMany({
+            where: own,
+            orderBy: { updatedAt: "desc" },
+            take: 5,
+            select: {
+              id: true,
+              ticketNumber: true,
+              summary: true,
+              currentStatus: true,
+              updatedAt: true,
+            },
+          }),
+        ]);
+
+      res.status(200).json({
+        data: {
+          metrics: { myOpenTickets, waitingOnYou, resolved, closed },
+          recentTickets: recent,
+        },
+      });
+    } catch (err) {
+      console.error("Failed to fetch requester dashboard:", err);
+      res.status(500).json({
+        error: {
+          message: "Failed to fetch requester dashboard",
+          code: "INTERNAL_SERVER_ERROR",
+        },
+      });
+    }
+  }
+);
 
 // ---------------------------------------------------------------------------
 // Eligible owners (supplementary helper for the IT Staff Owner select; the
