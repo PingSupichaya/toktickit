@@ -565,6 +565,39 @@ button.metric-card__link:focus-visible {
   outline-offset: 2px;
 }
 
+/* Requester Dashboard grids (ui-spec §9): metric cards 4 columns, content
+   row 2 columns on desktop; collapse on tablet/mobile. */
+.dashboard__cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-4);
+}
+
+.dashboard__row {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .dashboard__cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .dashboard__row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 767px) {
+  .dashboard__cards {
+    grid-template-columns: 1fr;
+  }
+  .dashboard__row {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Requester Dashboard recent-ticket rows: spaced items with a bordered
    ticket-number button (secondary-button treatment) linking to the detail
    view, plus a larger "View all" for the recent list. */
