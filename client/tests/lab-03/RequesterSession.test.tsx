@@ -84,15 +84,24 @@ beforeEach(() => {
 
 const user = userEvent.setup();
 
+// Lab 4: Requesters land on the Dashboard — step into My Tickets first.
+async function openMyTickets() {
+  render(<App />);
+
+  await waitFor(() => {
+    expect(document.querySelector(".app-header__user-name")?.textContent).toBe(
+      "Alice Johnson"
+    );
+  });
+  await user.click(screen.getByRole("button", { name: "My Tickets" }));
+  await waitFor(() => {
+    expect(screen.getByTestId("ticket-count")).toBeInTheDocument();
+  });
+}
+
 describe("Requester regression under the authenticated session (UI-10 - AC-20)", () => {
   it("renders My Tickets with the session identity and exposes all 8 status filters", async () => {
-    render(<App />);
-
-    await waitFor(() => {
-      expect(document.querySelector(".app-header__user-name")?.textContent).toBe(
-        "Alice Johnson"
-      );
-    });
+    await openMyTickets();
     expect(screen.getByTestId("role-badge")).toHaveAttribute(
       "data-value",
       "REQUESTER"
@@ -123,13 +132,7 @@ describe("Requester regression under the authenticated session (UI-10 - AC-20)",
   });
 
   it("fetches the Ticket Detail with only the ticket id (owner scoped server-side)", async () => {
-    render(<App />);
-
-    await waitFor(() => {
-      expect(document.querySelector(".app-header__user-name")?.textContent).toBe(
-        "Alice Johnson"
-      );
-    });
+    await openMyTickets();
 
     const openIt = screen.getByRole("button", { name: "Open ticket TKT-000001" });
     await waitFor(() => expect(openIt).toBeEnabled());

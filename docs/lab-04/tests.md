@@ -82,11 +82,11 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 
 | Test ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
-| API-23 | API | AC-02 / BR-14 | Metrics scoped to own Tickets only | Seeded Requester with known Ticket mix → each metric matches a hand-computed expected count; another Requester's Tickets never counted | Planned |
-| API-24 | API | AC-11 / BR-17 | Zero-Ticket Requester | All metrics = 0; `recentTickets: []`; 200, not an error | Planned |
-| API-25 | API | BR-14 | Recent Tickets cap and ordering | Returns at most 5, ordered `updatedAt desc` | Planned |
-| API-26 | API | FR-10 | Non-Requester denied | IT_STAFF/ADMIN calling this endpoint → 403 | Planned |
-| API-27 | API | BR-18 | Timestamps in UTC ISO-8601 | `recentTickets[].updatedAt` format verified | Planned |
+| API-23 | API | AC-02 / BR-14 | Metrics scoped to own Tickets only | Seeded Requester with known Ticket mix → each metric matches a hand-computed expected count; another Requester's Tickets never counted | Pass |
+| API-24 | API | AC-11 / BR-17 | Zero-Ticket Requester | All metrics = 0; `recentTickets: []`; 200, not an error | Pass |
+| API-25 | API | BR-14 | Recent Tickets cap and ordering | Returns at most 5, ordered `updatedAt desc` | Pass |
+| API-26 | API | FR-10 | Non-Requester denied | IT_STAFF/ADMIN calling this endpoint → 403 | Pass |
+| API-27 | API | BR-18 | Timestamps in UTC ISO-8601 | `recentTickets[].updatedAt` format verified | Pass |
 
 ### 2.4 IT Staff Dashboard — `server/tests/lab-04/staff-dashboard.api.test.ts`
 

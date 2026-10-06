@@ -7,12 +7,14 @@ import { RoleBadge } from "../ui/RoleBadge.js";
 import { Card } from "../ui/Card.js";
 import { TicketForm } from "../features/TicketForm.js";
 import { MyTickets } from "../features/MyTickets.js";
+import { RequesterDashboard } from "../features/RequesterDashboard.js";
 import { StaffTicketQueue } from "../features/StaffTicketQueue.js";
 import { StaffTicketDetail } from "../features/StaffTicketDetail.js";
 import { TicketDetail } from "../features/TicketDetail.js";
 import { UserList } from "../features/UserList.js";
 
 type ShellView =
+  | "dashboard"
   | "my-tickets"
   | "create-ticket"
   | "ticket-detail"
@@ -21,7 +23,10 @@ type ShellView =
   | "users";
 
 const NAV_ITEMS_BY_ROLE: Record<UserRole, { id: ShellView; label: string }[]> = {
+  // Lab 4 (ui-spec §3): Dashboard leads the Requester nav and is the landing
+  // view after login. Staff/Admin dashboard links arrive with Issue 7.
   REQUESTER: [
+    { id: "dashboard", label: "Dashboard" },
     { id: "my-tickets", label: "My Tickets" },
     { id: "create-ticket", label: "Create Ticket" },
   ],
@@ -35,10 +40,14 @@ const NAV_ITEMS_BY_ROLE: Record<UserRole, { id: ShellView; label: string }[]> = 
 function ShellContent() {
   const { user, logout } = useAuth();
   const [activeView, setActiveView] = useState<ShellView>(() =>
-    user?.role === "REQUESTER" ? "my-tickets" : "queue"
+    user?.role === "REQUESTER" ? "dashboard" : "queue"
   );
   const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Dashboard drill-down preset for My Tickets (statuses applied on arrival).
+  // Bumped alongside every drill-down so the list remounts with the preset.
+  const [ticketPresetKey, setTicketPresetKey] = useState(0);
+  const [ticketPreset, setTicketPreset] = useState<string[] | null>(null);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -62,7 +71,20 @@ function ShellContent() {
 
   function navigate(view: ShellView) {
     setSelectedTicketId(null);
+    if (view === "my-tickets") {
+      // Plain navigation opens the unfiltered list.
+      setTicketPreset(null);
+      setTicketPresetKey((k) => k + 1);
+    }
     setActiveView(view);
+    setMenuOpen(false);
+  }
+
+  function openFilteredTickets(statuses: string[] | null) {
+    setSelectedTicketId(null);
+    setTicketPreset(statuses);
+    setTicketPresetKey((k) => k + 1);
+    setActiveView("my-tickets");
     setMenuOpen(false);
   }
 
@@ -118,7 +140,16 @@ function ShellContent() {
       </header>
 
       <main className="container" style={{ padding: "var(--space-8) var(--space-6)" }}>
-        {activeView === "queue" ? (
+        {activeView === "dashboard" ? (
+          <RequesterDashboard
+            onDrillDown={openFilteredTickets}
+            onCreateTicket={() => navigate("create-ticket")}
+            onOpenTicket={(ticketId) => {
+              setSelectedTicketId(ticketId);
+              setActiveView("ticket-detail");
+            }}
+          />
+        ) : activeView === "queue" ? (
           <StaffTicketQueue
             onOpenTicket={(ticket) => {
               setSelectedTicketId(ticket.id);
@@ -146,6 +177,8 @@ function ShellContent() {
           />
         ) : (
           <MyTickets
+            key={ticketPresetKey}
+            initialStatuses={ticketPreset ?? undefined}
             onCreateTicket={() => navigate("create-ticket")}
             onOpenTicket={(ticket) => {
               setSelectedTicketId(ticket.id);
