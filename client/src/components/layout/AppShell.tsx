@@ -8,6 +8,11 @@ import { Card } from "../ui/Card.js";
 import { TicketForm } from "../features/TicketForm.js";
 import { MyTickets } from "../features/MyTickets.js";
 import { RequesterDashboard } from "../features/RequesterDashboard.js";
+import {
+  StaffDashboard,
+  StaffDrillDown,
+} from "../features/StaffDashboard.js";
+import { QueuePreset } from "../features/StaffTicketQueue.js";
 import { StaffTicketQueue } from "../features/StaffTicketQueue.js";
 import { StaffTicketDetail } from "../features/StaffTicketDetail.js";
 import { TicketDetail } from "../features/TicketDetail.js";
@@ -23,15 +28,19 @@ type ShellView =
   | "users";
 
 const NAV_ITEMS_BY_ROLE: Record<UserRole, { id: ShellView; label: string }[]> = {
-  // Lab 4 (ui-spec §3): Dashboard leads the Requester nav and is the landing
-  // view after login. Staff/Admin dashboard links arrive with Issue 7.
+  // Lab 4 (ui-spec §3): Dashboard leads every role's nav and is the landing
+  // view after login.
   REQUESTER: [
     { id: "dashboard", label: "Dashboard" },
     { id: "my-tickets", label: "My Tickets" },
     { id: "create-ticket", label: "Create Ticket" },
   ],
-  IT_STAFF: [{ id: "queue", label: "Ticket Queue" }],
+  IT_STAFF: [
+    { id: "dashboard", label: "Dashboard" },
+    { id: "queue", label: "Ticket Queue" },
+  ],
   ADMIN: [
+    { id: "dashboard", label: "Dashboard" },
     { id: "queue", label: "Ticket Queue" },
     { id: "users", label: "User Management" },
   ],
@@ -39,15 +48,22 @@ const NAV_ITEMS_BY_ROLE: Record<UserRole, { id: ShellView; label: string }[]> = 
 
 function ShellContent() {
   const { user, logout } = useAuth();
-  const [activeView, setActiveView] = useState<ShellView>(() =>
-    user?.role === "REQUESTER" ? "dashboard" : "queue"
-  );
+  // Lab 4 (ui-spec §3): Dashboard is the landing view after login for every
+  // role.
+  const [activeView, setActiveView] = useState<ShellView>("dashboard");
   const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   // Dashboard drill-down preset for My Tickets (statuses applied on arrival).
   // Bumped alongside every drill-down so the list remounts with the preset.
   const [ticketPresetKey, setTicketPresetKey] = useState(0);
   const [ticketPreset, setTicketPreset] = useState<string[] | null>(null);
+  // Same pattern for the Ticket Queue (drill-down filters + search focus) and
+  // User Management (role filter from the admin user strip).
+  const [queuePresetKey, setQueuePresetKey] = useState(0);
+  const [queuePreset, setQueuePreset] = useState<QueuePreset | null>(null);
+  const [queueFocusSearch, setQueueFocusSearch] = useState(false);
+  const [usersPresetKey, setUsersPresetKey] = useState(0);
+  const [usersRole, setUsersRole] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -76,6 +92,16 @@ function ShellContent() {
       setTicketPreset(null);
       setTicketPresetKey((k) => k + 1);
     }
+    if (view === "queue") {
+      // Plain navigation opens the unfiltered queue without search focus.
+      setQueuePreset(null);
+      setQueueFocusSearch(false);
+      setQueuePresetKey((k) => k + 1);
+    }
+    if (view === "users") {
+      setUsersRole(undefined);
+      setUsersPresetKey((k) => k + 1);
+    }
     setActiveView(view);
     setMenuOpen(false);
   }
@@ -86,6 +112,25 @@ function ShellContent() {
     setTicketPresetKey((k) => k + 1);
     setActiveView("my-tickets");
     setMenuOpen(false);
+  }
+
+  function openFilteredQueue(preset: QueuePreset, focusSearch = false) {
+    setSelectedTicketId(null);
+    setQueuePreset(preset);
+    setQueueFocusSearch(focusSearch);
+    setQueuePresetKey((k) => k + 1);
+    setActiveView("queue");
+    setMenuOpen(false);
+  }
+
+  function openStaffDrillDown(drill: StaffDrillDown) {
+    if (drill.kind === "status") {
+      openFilteredQueue({ status: drill.status });
+    } else if (drill.kind === "assignment") {
+      openFilteredQueue({ assignment: drill.assignment });
+    } else {
+      openFilteredQueue({ priority: drill.priority });
+    }
   }
 
   return (
@@ -141,16 +186,37 @@ function ShellContent() {
 
       <main className="container" style={{ padding: "var(--space-8) var(--space-6)" }}>
         {activeView === "dashboard" ? (
-          <RequesterDashboard
-            onDrillDown={openFilteredTickets}
-            onCreateTicket={() => navigate("create-ticket")}
-            onOpenTicket={(ticketId) => {
-              setSelectedTicketId(ticketId);
-              setActiveView("ticket-detail");
-            }}
-          />
+          user.role === "REQUESTER" ? (
+            <RequesterDashboard
+              onDrillDown={openFilteredTickets}
+              onCreateTicket={() => navigate("create-ticket")}
+              onOpenTicket={(ticketId) => {
+                setSelectedTicketId(ticketId);
+                setActiveView("ticket-detail");
+              }}
+            />
+          ) : (
+            <StaffDashboard
+              onDrillDown={openStaffDrillDown}
+              onBrowseQueue={() => openFilteredQueue({ assignment: "unassigned" })}
+              onSearchTickets={() => openFilteredQueue({}, true)}
+              onOpenTicket={(ticketId) => {
+                setSelectedTicketId(ticketId);
+                setActiveView("staff-ticket-detail");
+              }}
+              onManageUsers={(role) => {
+                setUsersRole(role);
+                setUsersPresetKey((k) => k + 1);
+                setActiveView("users");
+                setMenuOpen(false);
+              }}
+            />
+          )
         ) : activeView === "queue" ? (
           <StaffTicketQueue
+            key={queuePresetKey}
+            initialFilters={queuePreset ?? undefined}
+            focusSearch={queueFocusSearch}
             onOpenTicket={(ticket) => {
               setSelectedTicketId(ticket.id);
               setActiveView("staff-ticket-detail");
@@ -162,7 +228,7 @@ function ShellContent() {
             onBack={() => navigate("queue")}
           />
         ) : activeView === "users" ? (
-          <UserList />
+          <UserList key={usersPresetKey} initialRole={usersRole} />
         ) : activeView === "create-ticket" ? (
           <div className="create-ticket-page">
             <h1 className="screen-title">Create Ticket</h1>

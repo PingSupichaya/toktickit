@@ -4,6 +4,12 @@ import {
   isStaleVersion,
   normalizeFollowUpNote,
 } from "../../src/actionTakenRules.js";
+import {
+  countActiveUsersByRole,
+  countRequesterMetrics,
+  countStaffMetrics,
+  type MetricTicket,
+} from "../../src/dashboardMetrics.js";
 
 // lab-04 unit tests — UNIT-02 (BR-12) and UNIT-03 (BR-04).
 // UNIT-01 (gate evaluator), UNIT-04 (metric builders), and UNIT-05 (actionAt
@@ -77,7 +83,67 @@ describe("UNIT-01 — resolution-gate evaluator (BR-10)", () => {
   });
 });
 
+describe("UNIT-04 — dashboard metric builders (BR-14, BR-15)", () => {
+  const tickets: MetricTicket[] = [
+    { currentStatus: "NEW", submittedById: 1, ownerId: null, itPriority: "LOW" },
+    { currentStatus: "OPEN", submittedById: 1, ownerId: 10, itPriority: "MEDIUM" },
+    { currentStatus: "IN_PROGRESS", submittedById: 1, ownerId: 10, itPriority: "HIGH" },
+    { currentStatus: "WAITING_FOR_REQUESTER", submittedById: 1, ownerId: null, itPriority: "LOW" },
+    { currentStatus: "RESOLVED", submittedById: 1, ownerId: 10, itPriority: "MEDIUM" },
+    { currentStatus: "CLOSED", submittedById: 1, ownerId: null, itPriority: "HIGH" },
+    { currentStatus: "REOPENED", submittedById: 2, ownerId: 10, itPriority: "LOW" },
+    { currentStatus: "CANCELLED", submittedById: 2, ownerId: null, itPriority: "MEDIUM" },
+  ];
+
+  it("requester metrics count only the caller's Tickets", () => {
+    expect(countRequesterMetrics(tickets, 1)).toEqual({
+      myOpenTickets: 3, // NEW + OPEN + IN_PROGRESS
+      waitingOnYou: 1,
+      resolved: 1,
+      closed: 1,
+    });
+    expect(countRequesterMetrics(tickets, 2)).toEqual({
+      myOpenTickets: 1, // REOPENED
+      waitingOnYou: 0,
+      resolved: 0,
+      closed: 0,
+    });
+    expect(countRequesterMetrics(tickets, 99)).toEqual({
+      myOpenTickets: 0,
+      waitingOnYou: 0,
+      resolved: 0,
+      closed: 0,
+    });
+  });
+
+  it("staff metrics separate queue-wide, unassigned, mine, and priority slices", () => {
+    expect(countStaffMetrics(tickets, 10)).toEqual({
+      new: 1,
+      open: 1,
+      inProgress: 1,
+      waitingForRequester: 1,
+      unassigned: 2, // NEW/null + WAITING/null (active only)
+      myAssigned: 3, // OPEN/10 + IN_PROGRESS/10 + REOPENED/10 (RESOLVED/10 excluded)
+      byPriority: { low: 3, medium: 1, high: 1 }, // active only
+    });
+    expect(countStaffMetrics(tickets, 99).myAssigned).toBe(0);
+  });
+
+  it("userCounts counts active users only, per role", () => {
+    expect(
+      countActiveUsersByRole([
+        { role: "REQUESTER", isActive: true },
+        { role: "REQUESTER", isActive: true },
+        { role: "REQUESTER", isActive: false },
+        { role: "IT_STAFF", isActive: true },
+        { role: "IT_STAFF", isActive: false },
+        { role: "ADMIN", isActive: true },
+        { role: "ADMIN", isActive: false },
+      ])
+    ).toEqual({ requesters: 2, itStaff: 1, admins: 1 });
+  });
+});
+
 describe.skip("Lab 4 validators unit contract (other issues)", () => {
-  it.todo("UNIT-04 metric builders incl. userCounts per role");
   it.todo("UNIT-05 actionAt validator: future beyond +5 min rejects, else accepts");
 });

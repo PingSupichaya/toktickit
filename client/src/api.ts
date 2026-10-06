@@ -916,3 +916,36 @@ export interface RequesterDashboardData {
 export async function fetchRequesterDashboard(): Promise<RequesterDashboardData> {
   return authJson<RequesterDashboardData>("/api/dashboard/requester");
 }
+
+// ---------------------------------------------------------------------------
+// Lab 4 — IT Staff Dashboard (FR-11 / api-spec §4.6, BR-15, D-07).
+// ---------------------------------------------------------------------------
+
+export interface StaffDashboardMetrics {
+  new: number;
+  open: number;
+  inProgress: number;
+  waitingForRequester: number;
+  unassigned: number;
+  myAssigned: number;
+  byPriority: { low: number; medium: number; high: number };
+}
+
+export interface ActiveUserCounts {
+  requesters: number;
+  itStaff: number;
+  admins: number;
+}
+
+export interface StaffDashboardData {
+  metrics: StaffDashboardMetrics;
+  recentTickets: DashboardRecentTicket[];
+  // ADMIN callers only; omitted entirely for IT_STAFF (D-07).
+  userCounts?: ActiveUserCounts;
+}
+
+// FR-11 — queue-wide operational counts plus the caller's recent Tickets.
+// ADMIN responses additionally carry active-only userCounts.
+export async function fetchStaffDashboard(): Promise<StaffDashboardData> {
+  return authJson<StaffDashboardData>("/api/dashboard/staff");
+}

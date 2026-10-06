@@ -51,11 +51,12 @@ interface PanelState {
   user: AdminUser | null;
 }
 
-export function UserList() {
+export function UserList({ initialRole }: { initialRole?: string } = {}) {
   const { user: me } = useAuth();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState("");
+  // Dashboard user-strip drill-down (ui-spec §4): role applied on arrival.
+  const [roleFilter, setRoleFilter] = useState(initialRole ?? "");
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

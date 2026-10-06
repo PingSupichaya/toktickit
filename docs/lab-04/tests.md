@@ -92,15 +92,15 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 
 | Test ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
-| API-28 | API | AC-10 / BR-15 | Metrics computed queue-wide | Seeded dataset with known status distribution → `new`/`open`/`inProgress`/`waitingForRequester` match hand-computed counts | Planned |
-| API-29 | API | BR-15 | `myAssigned` excludes terminal statuses | Owned Tickets in RESOLVED/CLOSED/CANCELLED are excluded from the count | Planned |
-| API-30 | API | AC-10 / BR-17 | Zero-assignment Staff user | `myAssigned = 0`; `recentTickets: []`; 200, not an error | Planned |
-| API-31 | API | AC-10 / BR-15 | `unassigned` metric | Count matches active Tickets (`ownerId IS NULL`, non-terminal status) against a hand-computed expected value; assigned and terminal-status Tickets excluded | Planned |
-| API-32 | API | AC-10 / BR-15 | `byPriority` breakdown | `low`/`medium`/`high` sub-counts each match hand-computed expected values over active Tickets only; terminal-status Tickets excluded from all three | Planned |
-| API-33 | API | FR-11 | Requester denied | Requester calling this endpoint → 403 | Planned |
-| API-34 | API | FR-11 / BR-15 | Administrator sees queue metrics plus userCounts | ADMIN receives 200 with identical queue metrics plus `userCounts` matching hand-computed active-user counts; `IT_STAFF` response omits `userCounts` entirely (D-07) | Planned |
+| API-28 | API | AC-10 / BR-15 | Metrics computed queue-wide | Seeded dataset with known status distribution → `new`/`open`/`inProgress`/`waitingForRequester` match hand-computed counts | Pass |
+| API-29 | API | BR-15 | `myAssigned` excludes terminal statuses | Owned Tickets in RESOLVED/CLOSED/CANCELLED are excluded from the count | Pass |
+| API-30 | API | AC-10 / BR-17 | Zero-assignment Staff user | `myAssigned = 0`; `recentTickets: []`; 200, not an error | Pass |
+| API-31 | API | AC-10 / BR-15 | `unassigned` metric | Count matches active Tickets (`ownerId IS NULL`, non-terminal status) against a hand-computed expected value; assigned and terminal-status Tickets excluded | Pass |
+| API-32 | API | AC-10 / BR-15 | `byPriority` breakdown | `low`/`medium`/`high` sub-counts each match hand-computed expected values over active Tickets only; terminal-status Tickets excluded from all three | Pass |
+| API-33 | API | FR-11 | Requester denied | Requester calling this endpoint → 403 | Pass |
+| API-34 | API | FR-11 / BR-15 | Administrator sees queue metrics plus userCounts | ADMIN receives 200 with identical queue metrics plus `userCounts` matching hand-computed active-user counts; `IT_STAFF` response omits `userCounts` entirely (D-07) | Pass |
 | API-35 | API | FR-12 / safe failure | Safe 500 shape on dashboard/actions endpoints | Forced server error → 500 with `{ error: { message, code: INTERNAL_SERVER_ERROR } }`, no stack/technical detail leaked | Planned |
-| API-36 | API | FR-11 / BR-15 | `userCounts` counts active users only | Inactive users excluded from all three sub-counts; verified against seeded active/inactive mix | Planned |
+| API-36 | API | FR-11 / BR-15 | `userCounts` counts active users only | Inactive users excluded from all three sub-counts; verified against seeded active/inactive mix | Pass |
 | API-39 | API | BR-02 / §5 Auth matrix | Inactive Staff denied on Lab 4 endpoints | Deactivated session → `401 UNAUTHORIZED` (session invalidated by `requireSession`); fresh login → `403 ACCOUNT_INACTIVE`; no record created | Pass |
 
 ### 2.5 Unit Tests — `server/tests/lab-04/`
@@ -110,7 +110,7 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 | UNIT-01 | Unit | BR-10 | Resolution-gate evaluator | `(actionCount, latestByActionAtFollowUpRequired) → allowed/denied` for all 4 input combinations | Pass |
 | UNIT-02 | Unit | BR-12 | Optimistic-concurrency comparator | Matching version → proceed; mismatched → reject, no side effects | Pass |
 | UNIT-03 | Unit | BR-04 | Follow-up conditional validator | `true` + empty → fail; `true` + note → pass; `false` ± note → pass with note normalized to `null` | Pass |
-| UNIT-04 | Unit | BR-14, BR-15 | Dashboard metric query builders | Given a mocked ticket set, each metric function returns the mathematically correct count (including `userCounts` per role) | Planned |
+| UNIT-04 | Unit | BR-14, BR-15 | Dashboard metric query builders | Given a mocked ticket set, each metric function returns the mathematically correct count (including `userCounts` per role) | Pass |
 | UNIT-05 | Unit | BR-06 | `actionAt` validator | Future beyond +5 min → reject; within tolerance/past/now → accept; invalid ISO → reject | Planned |
 
 ### 2.6 UI Component Tests — `client/tests/lab-04/`
