@@ -182,6 +182,10 @@ describe("API-17 — gate looks only at the most recent action (BR-10)", () => {
 });
 
 describe("API-18/19 — full transition matrix persists (FR-06 / §7)", () => {
+  // Fresh Prisma-created tickets start at version 1 (D-01) and every
+  // successful PATCH returns version+1, so the walks track the version
+  // locally instead of re-reading it per hop — ~30 fewer round trips, which
+  // keeps this test inside the timeout under parallel load.
   it("every permitted move succeeds, incl. gated RESOLVED hops", async () => {
     const staff = await loginAgent(app, EMAIL.staff1);
     const walks: Array<{ from: string; hops: string[] }> = [
@@ -195,24 +199,23 @@ describe("API-18/19 — full transition matrix persists (FR-06 / §7)", () => {
     ];
     for (const { from, hops } of walks) {
       const id = await makeTicket(from);
+      let version = 1;
       for (const to of hops) {
         if (to === "RESOLVED") await addQualifyingAction(staff, id);
-        const res = await patchTicket(staff, id, {
-          version: await currentVersion(staff, id),
-          currentStatus: to,
-        });
+        const res = await patchTicket(staff, id, { version, currentStatus: to });
         expect(res.status).toBe(200);
         expect(res.body.data.currentStatus).toBe(to);
+        version = res.body.data.version;
       }
     }
     // CLOSED → REOPENED.
     const closedId = await makeTicket("CLOSED");
     const reopen = await patchTicket(staff, closedId, {
-      version: await currentVersion(staff, closedId),
+      version: 1,
       currentStatus: "REOPENED",
     });
     expect(reopen.status).toBe(200);
-  });
+  }, 30000);
 
   it("every disallowed pair → 409 TICKET_STATUS_TRANSITION_NOT_ALLOWED", async () => {
     const staff = await loginAgent(app, EMAIL.staff1);
@@ -227,9 +230,10 @@ describe("API-18/19 — full transition matrix persists (FR-06 / §7)", () => {
       ["REOPENED", "CLOSED"],
     ];
     for (const [from, to] of denied) {
+      // Fresh tickets: version is untouched (1), so no version read is needed.
       const id = await makeTicket(from);
       const res = await patchTicket(staff, id, {
-        version: await currentVersion(staff, id),
+        version: 1,
         currentStatus: to,
       });
       expect(res.status).toBe(409);

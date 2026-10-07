@@ -573,6 +573,12 @@ button.metric-card__link:focus-visible {
   gap: var(--space-4);
 }
 
+/* Staff Dashboard metric grid: 6 cards in 3 columns (2 rows) on desktop,
+   2 columns on tablet, 1 column on mobile. */
+.dashboard__cards--staff {
+  grid-template-columns: repeat(3, 1fr);
+}
+
 .dashboard__row {
   display: grid;
   grid-template-columns: 2fr 1fr;

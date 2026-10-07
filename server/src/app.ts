@@ -1398,6 +1398,101 @@ app.get(
 );
 
 // ---------------------------------------------------------------------------
+// IT Staff Dashboard (Lab 4, docs/lab-04/api-spec.md §4.6, BR-15, D-07).
+// GET /api/dashboard/staff -> 200 { data: { metrics, recentTickets } }
+// Queue-wide status counts plus Unassigned / My Assigned / byPriority over
+// active (non-terminal) Tickets. recentTickets is the caller's 5 most
+// recently updated owned Tickets (updatedAt desc), [] when none (AC-10).
+// ADMIN callers additionally receive active-only `userCounts`; IT_STAFF
+// responses omit the field entirely. Computed live per request (BR-16).
+// ---------------------------------------------------------------------------
+app.get(
+  "/api/dashboard/staff",
+  requireRole(UserRole.IT_STAFF, UserRole.ADMIN),
+  async (req: Request, res: Response) => {
+    try {
+      const user = req.sessionUser;
+      if (!user) {
+        return res.status(401).json({
+          error: { message: "Authentication required", code: "UNAUTHORIZED" },
+        });
+      }
+
+      const db = getPrisma();
+      const active = {
+        currentStatus: { notIn: ["RESOLVED", "CLOSED", "CANCELLED"] as TicketStatus[] },
+      };
+      const [
+        fresh,
+        open,
+        inProgress,
+        waitingForRequester,
+        unassigned,
+        myAssigned,
+        low,
+        medium,
+        high,
+        recent,
+      ] = await Promise.all([
+        db.ticket.count({ where: { currentStatus: "NEW" } }),
+        db.ticket.count({ where: { currentStatus: "OPEN" } }),
+        db.ticket.count({ where: { currentStatus: "IN_PROGRESS" } }),
+        db.ticket.count({ where: { currentStatus: "WAITING_FOR_REQUESTER" } }),
+        db.ticket.count({ where: { ...active, ownerId: null } }),
+        db.ticket.count({ where: { ...active, ownerId: user.id } }),
+        db.ticket.count({ where: { ...active, itPriority: "LOW" } }),
+        db.ticket.count({ where: { ...active, itPriority: "MEDIUM" } }),
+        db.ticket.count({ where: { ...active, itPriority: "HIGH" } }),
+        db.ticket.findMany({
+          where: { ownerId: user.id },
+          orderBy: { updatedAt: "desc" },
+          take: 5,
+          select: {
+            id: true,
+            ticketNumber: true,
+            summary: true,
+            currentStatus: true,
+            updatedAt: true,
+          },
+        }),
+      ]);
+
+      const data: Record<string, unknown> = {
+        metrics: {
+          new: fresh,
+          open,
+          inProgress,
+          waitingForRequester,
+          unassigned,
+          myAssigned,
+          byPriority: { low, medium, high },
+        },
+        recentTickets: recent,
+      };
+
+      if (user.role === UserRole.ADMIN) {
+        const [requesters, itStaff, admins] = await Promise.all([
+          db.user.count({ where: { role: "REQUESTER", isActive: true } }),
+          db.user.count({ where: { role: "IT_STAFF", isActive: true } }),
+          db.user.count({ where: { role: "ADMIN", isActive: true } }),
+        ]);
+        data.userCounts = { requesters, itStaff, admins };
+      }
+
+      res.status(200).json({ data });
+    } catch (err) {
+      console.error("Failed to fetch staff dashboard:", err);
+      res.status(500).json({
+        error: {
+          message: "Failed to fetch staff dashboard",
+          code: "INTERNAL_SERVER_ERROR",
+        },
+      });
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
 // Eligible owners (supplementary helper for the IT Staff Owner select; the
 // documented API defines only PUT /owner, so this endpoint supplies the
 // candidate list for the ui-spec §6.3 `owner-select`). Active IT_STAFF/ADMIN

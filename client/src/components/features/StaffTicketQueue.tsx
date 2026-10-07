@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Category,
   RelatedSystem,
@@ -134,12 +134,32 @@ function PriorityBadge({ priority }: { priority: string }) {
   );
 }
 
+export interface QueuePreset {
+  status?: string;
+  priority?: RequestedPriority | "";
+  assignment?: string;
+  search?: string;
+}
+
 export function StaffTicketQueue({
   onOpenTicket,
+  initialFilters,
+  focusSearch,
 }: {
   onOpenTicket?: (ticket: QueueTicket) => void;
+  // Dashboard drill-down preset (ui-spec §4): filters applied on arrival.
+  initialFilters?: QueuePreset;
+  // "Search Tickets" quick action: land with the search box focused.
+  focusSearch?: boolean;
 } = {}) {
-  const [filters, setFilters] = useState<ToolbarState>(() => applyFilters({}));
+  const [filters, setFilters] = useState<ToolbarState>(() =>
+    applyFilters({ ...(initialFilters ?? {}) })
+  );
+  const searchRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (focusSearch) searchRef.current?.focus();
+  }, [focusSearch]);
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -271,6 +291,7 @@ export function StaffTicketQueue({
       {/* Controls row 1: search left, count right */}
       <div className="queue__row1">
         <input
+          ref={searchRef}
           className="input queue__search"
           data-testid="queue-search-input"
           type="search"
