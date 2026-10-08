@@ -233,13 +233,13 @@ _Filled in on the final `main` branch before submission._
 
 | Type | Total | Pass | Fail | Pending |
 |---|---|---|---|---|
-| Unit | 5 | 0 | 0 | 5 |
-| API | 39 | 0 | 0 | 39 |
-| MIG | 5 | 0 | 0 | 5 |
-| UI | 11 | 0 | 0 | 11 |
-| E2E | 6 | 0 | 0 | 6 |
-| PERF | 1 | 0 | 0 | 1 |
-| **Total** | **67** | **0** | **0** | **67** |
+| Unit | 5 | 5 | 0 | 0 |
+| API | 39 | 39 | 0 | 0 |
+| MIG | 5 | 5 | 0 | 0 |
+| UI | 11 | 11 | 0 | 0 |
+| E2E | 6 | 6 | 0 | 0 |
+| PERF | 1 | 1 | 0 | 0 |
+| **Total** | **67** | **67** | **0** | **0** |
 
 ---
 
