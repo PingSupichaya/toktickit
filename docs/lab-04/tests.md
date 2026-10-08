@@ -62,7 +62,7 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 | API-12 | API | AC-07 / BR-12 | Stale-write rejected on edit | Submitting an outdated `version` → 409 `STALE_UPDATE` with current record in `details`; correct `version` → 200, `version` incremented | Pass |
 | API-13 | API | BR-04 | Edit re-validates follow-up conditional | Editing to `followUpRequired=true` without a note → 400, even if the record previously had `followUpRequired=false` | Pass |
 | API-37 | API | AC-13 / BR-06 | `actionAt` future rejected, past accepted | Future `actionAt` (>5 min / 300s ahead) → 400 `ACTION_AT_IN_FUTURE`; within +5 min or past → 201 and stored verbatim | Pass |
-| API-38 | API | AC-04, AC-05 / BR-10 | Gate keys off latest `actionAt` | Backdated action inserted after a newer one does not become the gate reference; latest by `actionAt` (tie highest `id`) decides | Planned |
+| API-38 | API | AC-04, AC-05 / BR-10 | Gate keys off latest `actionAt` | Backdated action inserted after a newer one does not become the gate reference; latest by `actionAt` (tie highest `id`) decides | Pass |
 
 ### 2.2 Ticket Workflow and Resolution — `server/tests/lab-04/ticket-workflow.api.test.ts`
 
@@ -111,7 +111,7 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 | UNIT-02 | Unit | BR-12 | Optimistic-concurrency comparator | Matching version → proceed; mismatched → reject, no side effects | Pass |
 | UNIT-03 | Unit | BR-04 | Follow-up conditional validator | `true` + empty → fail; `true` + note → pass; `false` ± note → pass with note normalized to `null` | Pass |
 | UNIT-04 | Unit | BR-14, BR-15 | Dashboard metric query builders | Given a mocked ticket set, each metric function returns the mathematically correct count (including `userCounts` per role) | Pass |
-| UNIT-05 | Unit | BR-06 | `actionAt` validator | Future beyond +5 min → reject; within tolerance/past/now → accept; invalid ISO → reject | Planned |
+| UNIT-05 | Unit | BR-06 | `actionAt` validator | Future beyond +5 min → reject; within tolerance/past/now → accept; invalid ISO → reject | Pass |
 
 ### 2.6 UI Component Tests — `client/tests/lab-04/`
 

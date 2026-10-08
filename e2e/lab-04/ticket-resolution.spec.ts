@@ -82,7 +82,15 @@ async function login(page: Page, email: string, password: string) {
   await expect(page.locator('[data-testid="logout-btn"]').first()).toBeVisible();
 }
 
+// Lab 4: successful logins land on /dashboard — step into the Ticket Queue
+// through the header nav first (idempotent: re-entering remounts the queue).
+async function gotoQueue(page: Page) {
+  await page.locator(".app-header__nav .app-header__nav-link").filter({ hasText: "Ticket Queue" }).click();
+  await expect(page.locator('[data-testid="queue-table"]')).toBeVisible();
+}
+
 async function openQueueTicket(page: Page, search: string, ticketNumber: string) {
+  await gotoQueue(page);
   await page.locator('[data-testid="queue-search-input"]').fill(search);
   const row = page.locator(`tr[aria-label="Open ticket ${ticketNumber}"]`);
   await expect(row).toBeVisible({ timeout: 10000 });

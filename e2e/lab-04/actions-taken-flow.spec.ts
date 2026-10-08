@@ -86,7 +86,19 @@ async function clearSession(page: Page) {
   await page.context().clearCookies();
 }
 
+// Lab 4: successful logins land on /dashboard for every role — step through
+// the header nav before touching view-specific controls.
+async function gotoQueue(page: Page) {
+  await page.locator(".app-header__nav .app-header__nav-link").filter({ hasText: "Ticket Queue" }).click();
+  await expect(page.locator('[data-testid="queue-table"]')).toBeVisible();
+}
+
+async function gotoMyTickets(page: Page) {
+  await page.locator(".app-header__nav .app-header__nav-link").filter({ hasText: "My Tickets" }).click();
+}
+
 async function openStaffTicket(page: Page) {
+  await gotoQueue(page);
   await page.locator('[data-testid="queue-search-input"]').fill(TICKET_SEARCH);
   const row = page.locator(`tr[aria-label="Open ticket ${TICKET_NUMBER}"]`);
   await expect(row).toBeVisible({ timeout: 10000 });
@@ -194,6 +206,7 @@ test("E2E-05 Requester sees Actions Taken read-only, zero write controls", async
   const errs = watch(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await login(page, REQUESTER.email, REQUESTER.password);
+  await gotoMyTickets(page);
 
   const card = page.locator(".ticket-card").filter({ hasText: "VPN profile" }).first();
   await expect(card).toBeVisible({ timeout: 15000 });
