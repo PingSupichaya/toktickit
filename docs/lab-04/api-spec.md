@@ -341,4 +341,5 @@ Tests live under `server/tests/lab-04/` and are planned in `docs/lab-04/tests.md
 - `requester-dashboard.api.test.ts` — metric calculations, empty states, ownership scoping
 - `staff-dashboard.api.test.ts` — metric calculations, empty states, `myAssigned` scoping, `userCounts` active-only
 - `lab04-validators.unit.test.ts` — UNIT-01–UNIT-05 pure logic (gate, version, follow-up, metrics, `actionAt`)
+- `safe-errors.api.test.ts` — API-35 safe 500 shape on dashboard/actions endpoints
 - `dashboard-smoke.perf.test.ts` — PERF-01 smoke timing

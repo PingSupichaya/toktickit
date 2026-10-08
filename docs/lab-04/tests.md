@@ -99,7 +99,7 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 | API-32 | API | AC-10 / BR-15 | `byPriority` breakdown | `low`/`medium`/`high` sub-counts each match hand-computed expected values over active Tickets only; terminal-status Tickets excluded from all three | Pass |
 | API-33 | API | FR-11 | Requester denied | Requester calling this endpoint → 403 | Pass |
 | API-34 | API | FR-11 / BR-15 | Administrator sees queue metrics plus userCounts | ADMIN receives 200 with identical queue metrics plus `userCounts` matching hand-computed active-user counts; `IT_STAFF` response omits `userCounts` entirely (D-07) | Pass |
-| API-35 | API | FR-12 / safe failure | Safe 500 shape on dashboard/actions endpoints | Forced server error → 500 with `{ error: { message, code: INTERNAL_SERVER_ERROR } }`, no stack/technical detail leaked | Planned |
+| API-35 | API | FR-12 / safe failure | Safe 500 shape on dashboard/actions endpoints | Forced server error → 500 with `{ error: { message, code: INTERNAL_SERVER_ERROR } }`, no stack/technical detail leaked | Pass |
 | API-36 | API | FR-11 / BR-15 | `userCounts` counts active users only | Inactive users excluded from all three sub-counts; verified against seeded active/inactive mix | Pass |
 | API-39 | API | BR-02 / §5 Auth matrix | Inactive Staff denied on Lab 4 endpoints | Deactivated session → `401 UNAUTHORIZED` (session invalidated by `requireSession`); fresh login → `403 ACCOUNT_INACTIVE`; no record created | Pass |
 
@@ -146,7 +146,7 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 |---|---|---|---|---|---|
 | MIG-01 | MIG | §9.5 / AC-12 | Migration preserves Lab 2/3 data | Row counts for `ticket`, `user`, `public_comment`, `internal_note`, `attachment` identical before/after migration; every existing Ticket gets `version = 1` | Pass |
 | MIG-02 | MIG | §9.6 | Seed data and idempotency | Tickets with 0 / 1 / multiple Actions Taken present (incl. one backdated `actionAt`); at least one qualifying-for-resolution Ticket; active/inactive users per role for `userCounts`; re-running seed produces no duplicates | Pass |
-| MIG-03 | MIG | AC-12 / BR-20 | Full Lab 2/3 functional regression | Authentication, Requester Ticket/Attachment lifecycle, IT Staff Queue/Ticket ops, Public Comments, Internal Notes, Administrator User Management — every Lab 3 AC re-verified and still passes | Planned |
+| MIG-03 | MIG | AC-12 / BR-20 | Full Lab 2/3 functional regression | Authentication, Requester Ticket/Attachment lifecycle, IT Staff Queue/Ticket ops, Public Comments, Internal Notes, Administrator User Management — every Lab 3 AC re-verified and still passes | Pass |
 | MIG-04 | MIG | D-03 | Pre-existing Resolved/Closed Tickets not retroactively blocked | Legacy Resolved/Closed Tickets from Lab 3 seed remain valid without a backfilled Action Taken | Pass |
 | MIG-05 | MIG | §9.5 rollback | Rollback / recovery path | Failed migration can be rolled back (`prisma migrate resolve --rolled-back`) or restored from pre-migration backup; re-run is safe with no data loss (verified by MIG-01 counts) | Pass |
 
@@ -154,7 +154,7 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 
 | Test ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
-| PERF-01 | PERF | FR-12 / BR-16 | Dashboard smoke at seed scale | With seed-scale data (dozens–low hundreds of Tickets), `GET /api/dashboard/requester` and `GET /api/dashboard/staff` each respond 200 within the smoke budget (e.g. < 2s local) with no N+1 failure; asserts status + shape only, not load testing | Planned |
+| PERF-01 | PERF | FR-12 / BR-16 | Dashboard smoke at seed scale | With seed-scale data (dozens–low hundreds of Tickets), `GET /api/dashboard/requester` and `GET /api/dashboard/staff` each respond 200 within the smoke budget (e.g. < 2s local) with no N+1 failure; asserts status + shape only, not load testing | Pass |
 
 ---
 

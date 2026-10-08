@@ -6,10 +6,10 @@ IT Service Desk app with a React client and an Express + PostgreSQL (Prisma) ser
 
 - `client/` — React + Vite frontend (unit/component tests in `client/tests/`)
 - `server/` — Express API + Prisma/PostgreSQL (API tests in `server/tests/`)
-- `e2e/` — Playwright end-to-end tests, organized by lab (`e2e/lab-02/` legacy, `e2e/lab-03/` current)
+- `e2e/` — Playwright end-to-end tests, organized by lab (`e2e/lab-02/` legacy, `e2e/lab-03/` and `e2e/lab-04/` current)
 - `docs/` — lab documentation (specifications, API/UI specs, evidence reviews)
 - `artifacts/` — test evidence, e.g. E2E screenshots
-- `playwright.config.ts` — root Playwright config (starts API on :3000 + client on :5174, `testDir: e2e/lab-03`)
+- `playwright.config.ts` — root Playwright config (starts API on :3000 + client on :5174, `testDir: e2e/`)
 
 ## Prerequisites
 
@@ -85,7 +85,7 @@ npm test
 
 ### End-to-end tests (Playwright)
 
-The Lab 3 E2E suite drives the full multi-role workflow in a real (headless) Chromium browser and saves screenshots to `artifacts/lab-03/screenshots/` as evidence (exact file paths in `docs/lab-03/ui-spec.md` §12). The Playwright config lives at the repository root (`testDir: e2e/lab-03`).
+The Lab 3 and Lab 4 E2E suites drive the full multi-role workflow in a real (headless) Chromium browser and save screenshots to `artifacts/lab-03/screenshots/` and `artifacts/lab-04/screenshots/` as evidence (exact file paths in `docs/lab-03/ui-spec.md` §12 and `docs/lab-04/ui-spec.md` §12). The Playwright config lives at the repository root (`testDir: e2e/`).
 
 **Prerequisites**
 - Docker Desktop is running and the `toktickit-postgres` container is up (see "PostgreSQL via Docker" above). Playwright starts only the Node processes — never the database — so every E2E test fails if Postgres is down.
@@ -102,8 +102,11 @@ The Lab 3 E2E suite drives the full multi-role workflow in a real (headless) Chr
 **Run the E2E tests** (from the repository root):
 
 ```bash
-# Lab 3 suite (11 tests, serial — no path argument needed)
+# Full suite, all labs (serial, one worker)
 npx playwright test
+
+# Lab 4 only
+npx playwright test e2e/lab-04
 ```
 
 Useful options:
@@ -121,10 +124,13 @@ The same commands are also available as npm scripts from the repo root: `npm run
 - `e2e/lab-03/staff-ticket-flow.spec.ts` — E2E-04/05/06/07: queue search/filter → claim → IT Priority → status change → Public Comment → Internal Note; comment/note visibility + resolution indicator; responsive queue/detail; authorization from the browser.
 - `e2e/lab-03/user-administration.spec.ts` — E2E-09/10: admin creates a user → first login forces change; edit/deactivate/reset-password; list search/filter; panel + mobile screenshots.
 - `e2e/lab-03/requester-regression.spec.ts` — E2E-11: authenticated requester creates a ticket, manages an attachment, posts a comment (Lab 2 selector is gone).
+- `e2e/lab-04/actions-taken-flow.spec.ts` — E2E-01: staff adds + edits an Action Taken (backdated/picker/future-blocked), list in `actionAt` order; E2E-05: requester sees the read-only list with zero write controls.
+- `e2e/lab-04/ticket-resolution.spec.ts` — E2E-02: resolution gate blocks, then resolves once qualified; E2E-03: concurrent edit shows the conflict banner without overwriting.
+- `e2e/lab-04/dashboards.spec.ts` — E2E-04/06 skeleton (dashboard drill-down + responsive evidence land with the dashboard UI issues, not this task).
 
-After running, confirm the screenshots were written to `artifacts/lab-03/screenshots/` (`authentication/`, `staff-queue/`, `staff-ticket-detail/`, `user-management/`).
+After running, confirm the screenshots were written to `artifacts/lab-03/screenshots/` (`authentication/`, `staff-queue/`, `staff-ticket-detail/`, `user-management/`) and `artifacts/lab-04/screenshots/actions-taken/`.
 
-> Note: `e2e/lab-02/` is the legacy Lab 2 suite (localStorage requester selector, 403 ownership block). It is not run by `npx playwright test` and does not pass against the Lab 3 app (authenticated identity, 404 cross-owner rule); requester regression now lives in E2E-11.
+> Note: `e2e/lab-02/` is the legacy Lab 2 suite (localStorage requester selector, 403 ownership block). It is not run by `npx playwright test` and does not pass against the current app (authenticated identity, 404 cross-owner rule); requester regression now lives in E2E-11.
 
 ### Manual verification
 
@@ -153,7 +159,7 @@ Use these steps to confirm each feature end to end. Do them in order — each on
    npm run prisma:seed
    ```
 
-   Expect the console to log that 4 categories were seeded. To inspect the rows directly, query the database in the Docker container:
+    Expect the console to log the seeded counts (4 categories, related systems, users, 16 tickets, public comments, internal notes, and Actions Taken). To inspect the rows directly, query the database in the Docker container:
 
    ```bash
    docker exec -it toktickit-postgres psql -U toktickit -d toktickit -c "SELECT * FROM category ORDER BY id;"
@@ -205,14 +211,21 @@ Use these steps to confirm each feature end to end. Do them in order — each on
 
    **If this fails but health check succeeded:** the server can't reach the database. Check the checklist above (Docker container running?), then check the server terminal for a `PrismaClientInitializationError` or `Can't reach database server` message.
 
-#### 3. Frontend status display
+#### 3. Frontend demo walkthrough (Lab 4)
 
-With both the server (`npm run dev` in `server/`) and client (`npm run dev` in `client/`) running:
+With both the server (`npm run dev` in `server/`) and client (`npm run dev` in `client/`) running, open the client URL in a browser (Vite prints it, usually `http://localhost:5173`). Ready-to-use demo accounts (no password change required):
 
-1. Open the client URL in a browser (Vite prints it, usually `http://localhost:5173`).
-2. Click **Check System**.
-3. **Backend online** — you should see "Online", a count of fetched categories, and the 4 category names listed.
-4. **Backend offline** — stop the server (`Ctrl+C` in its terminal) and click **Check System** again. You should see an error message instead of the category list, with no app crash.
+| Role | Email | Password |
+|---|---|---|
+| Requester | `alice.john@mail.kmutt.ac.th` | `Password123!` |
+| IT Staff | `frank.ngu@mail.kmutt.ac.th` | `Password123!` |
+| Admin | `omar.far@mail.kmutt.ac.th` | `Password123!` |
+
+All other seeded accounts use the initial password `ChangeMe123!` and must change it at first login.
+
+**As the Requester (Alice):** after login you land on the **Dashboard** — own-ticket counts, recent tickets, and quick actions. Open **My Tickets**, then a ticket to see its **Actions Taken** card (read-only: no Add/Edit buttons anywhere).
+
+**As IT Staff (Frank):** after login you land on the **Staff Dashboard** — queue metrics, priority breakdown, and your recent tickets. Every metric drills into the pre-filtered Ticket Queue. Open a ticket, switch to the **Actions Taken** tab, add an action (try the follow-up toggle and a future date to see validation), then change the ticket status — resolving is blocked with an inline reason until a qualifying Action Taken exists.
 
 ## Running the app
 
