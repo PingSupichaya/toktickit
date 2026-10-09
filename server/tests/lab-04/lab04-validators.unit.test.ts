@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  ACTION_AT_FUTURE_TOLERANCE_MS,
+  isActionAtTooFarInFuture,
   isResolutionGateSatisfied,
   isStaleVersion,
   normalizeFollowUpNote,
+  parseActionAt,
 } from "../../src/actionTakenRules.js";
 import {
   countActiveUsersByRole,
@@ -144,6 +147,36 @@ describe("UNIT-04 — dashboard metric builders (BR-14, BR-15)", () => {
   });
 });
 
-describe.skip("Lab 4 validators unit contract (other issues)", () => {
-  it.todo("UNIT-05 actionAt validator: future beyond +5 min rejects, else accepts");
+describe("UNIT-05 — actionAt validator (BR-06)", () => {
+  const now = new Date("2026-09-20T12:00:00.000Z").getTime();
+
+  it("parses valid ISO-8601, rejects missing and invalid input", () => {
+    expect(parseActionAt("2026-09-20T09:15:00.000Z")).toEqual({
+      ok: true,
+      date: new Date("2026-09-20T09:15:00.000Z"),
+    });
+    expect(parseActionAt("").ok).toBe(false);
+    expect(parseActionAt(undefined).ok).toBe(false);
+    expect(parseActionAt(null).ok).toBe(false);
+    expect(parseActionAt("not-a-date").ok).toBe(false);
+    expect(parseActionAt(12345).ok).toBe(false);
+  });
+
+  it("rejects future dates beyond the +5 min tolerance, accepts the rest", () => {
+    const tolerance = ACTION_AT_FUTURE_TOLERANCE_MS;
+    expect(tolerance).toBe(5 * 60 * 1000);
+    // Beyond tolerance → too far.
+    expect(
+      isActionAtTooFarInFuture(new Date(now + tolerance + 1000), now)
+    ).toBe(true);
+    // Within tolerance (client clock skew) → accepted.
+    expect(isActionAtTooFarInFuture(new Date(now + tolerance - 1000), now)).toBe(
+      false
+    );
+    expect(isActionAtTooFarInFuture(new Date(now), now)).toBe(false);
+    // Past values (backdated logging) always pass.
+    expect(
+      isActionAtTooFarInFuture(new Date("2020-01-15T08:30:00.000Z"), now)
+    ).toBe(false);
+  });
 });

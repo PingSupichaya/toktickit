@@ -205,6 +205,7 @@ test("E2E-08 role-based navigation hides unauthorized destinations", async ({ pa
   await expectShell(page, ACTIVE_REQUESTER.name);
 
   const requesterNav = page.locator(".app-header__nav");
+  await expect(requesterNav.getByText("Dashboard")).toBeVisible();
   await expect(requesterNav.getByText("My Tickets")).toBeVisible();
   await expect(requesterNav.getByText("Create Ticket")).toBeVisible();
   await expect(requesterNav.getByText("Ticket Queue")).toHaveCount(0);
@@ -218,6 +219,7 @@ test("E2E-08 role-based navigation hides unauthorized destinations", async ({ pa
   await expect(page.locator('[data-testid="role-badge"]')).toHaveAttribute("data-value", "IT_STAFF");
 
   const staffNav = page.locator(".app-header__nav");
+  await expect(staffNav.getByText("Dashboard")).toBeVisible();
   await expect(staffNav.getByText("Ticket Queue")).toBeVisible();
   await expect(staffNav.getByText("My Tickets")).toHaveCount(0);
   await expect(staffNav.getByText("Create Ticket")).toHaveCount(0);

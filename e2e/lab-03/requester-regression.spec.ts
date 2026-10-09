@@ -116,8 +116,9 @@ test("E2E-11 authenticated requester creates a ticket, manages an attachment, an
   await expect(page.getByText("Switch Requester")).toHaveCount(0);
   await expect(page.getByText("DEVELOPMENT MODE")).toHaveCount(0);
 
-  // Create a Ticket through the real form.
-  await page.locator('[data-testid="create-ticket-btn"]').click();
+  // Lab 4: logins land on /dashboard — step into the Create Ticket form
+  // through the header nav first.
+  await page.locator(".app-header__nav .app-header__nav-link").filter({ hasText: "Create Ticket" }).click();
   await expect(page.locator('[data-testid="category-select"]')).toBeVisible();
   await page.locator('[data-testid="summary-input"]').fill("E2E-11 regression ticket — authenticated create");
   await page.locator('[data-testid="description-input"]').fill(created.description);

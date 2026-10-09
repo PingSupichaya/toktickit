@@ -10,7 +10,7 @@ import {
 } from "../helpers/testAuth.js";
 
 // ---------------------------------------------------------------------------
-// lab-04 / ticket-workflow.api.test.ts — API-14–API-22
+// lab-04 / ticket-workflow.api.test.ts — API-14–API-22, API-38
 // (docs/lab-04/tests.md §2.2, api-spec §4.4 + §5, BR-10–BR-13).
 // ---------------------------------------------------------------------------
 
@@ -310,5 +310,58 @@ describe("API-22 — evaluation order: version → matrix → gate (BR-11)", () 
     });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe("TICKET_STATUS_TRANSITION_NOT_ALLOWED");
+  });
+});
+
+describe("API-38 — gate keys off latest actionAt, not insertion order (AC-04, AC-05 / BR-10)", () => {
+  async function addAction(
+    agent: request.Agent,
+    ticketId: number,
+    actionAt: string,
+    followUpRequired: boolean,
+    n: string
+  ) {
+    const res = await agent
+      .post(`/api/tickets/${ticketId}/actions`)
+      .set("Origin", TRUSTED_ORIGIN)
+      .send({
+        actionAt,
+        description: `API-38 ${n} work.`,
+        result: `API-38 ${n} result.`,
+        followUpRequired,
+        ...(followUpRequired ? { followUpNote: `API-38 ${n} follow-up.` } : {}),
+      });
+    expect(res.status).toBe(201);
+  }
+
+  async function tryResolve(agent: request.Agent, ticketId: number) {
+    return patchTicket(agent, ticketId, {
+      version: await currentVersion(agent, ticketId),
+      currentStatus: "RESOLVED",
+    });
+  }
+
+  it("a later-inserted backdated action does not become the gate reference", async () => {
+    const staff = await loginAgent(app, EMAIL.staff1);
+    const id = await makeTicket("OPEN");
+    // Inserted first, latest by actionAt, needs follow-up → blocked.
+    await addAction(staff, id, "2026-09-20T09:15:00.000Z", true, "newer-blocked");
+    // Inserted second but backdated → must not rescue the gate.
+    await addAction(staff, id, "2026-09-18T09:15:00.000Z", false, "older-clean");
+    const res = await tryResolve(staff, id);
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("RESOLUTION_NOT_ALLOWED");
+  });
+
+  it("a later-inserted blocked action does not block a cleaner latest actionAt", async () => {
+    const staff = await loginAgent(app, EMAIL.staff1);
+    const id = await makeTicket("OPEN");
+    // Inserted first, latest by actionAt, clean → gate satisfied …
+    await addAction(staff, id, "2026-09-20T09:15:00.000Z", false, "newer-clean");
+    // … even though a blocked action is inserted afterwards with an older date.
+    await addAction(staff, id, "2026-09-18T09:15:00.000Z", true, "older-blocked");
+    const res = await tryResolve(staff, id);
+    expect(res.status).toBe(200);
+    expect(res.body.data.currentStatus).toBe("RESOLVED");
   });
 });

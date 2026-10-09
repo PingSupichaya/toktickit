@@ -62,7 +62,7 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 | API-12 | API | AC-07 / BR-12 | Stale-write rejected on edit | Submitting an outdated `version` → 409 `STALE_UPDATE` with current record in `details`; correct `version` → 200, `version` incremented | Pass |
 | API-13 | API | BR-04 | Edit re-validates follow-up conditional | Editing to `followUpRequired=true` without a note → 400, even if the record previously had `followUpRequired=false` | Pass |
 | API-37 | API | AC-13 / BR-06 | `actionAt` future rejected, past accepted | Future `actionAt` (>5 min / 300s ahead) → 400 `ACTION_AT_IN_FUTURE`; within +5 min or past → 201 and stored verbatim | Pass |
-| API-38 | API | AC-04, AC-05 / BR-10 | Gate keys off latest `actionAt` | Backdated action inserted after a newer one does not become the gate reference; latest by `actionAt` (tie highest `id`) decides | Planned |
+| API-38 | API | AC-04, AC-05 / BR-10 | Gate keys off latest `actionAt` | Backdated action inserted after a newer one does not become the gate reference; latest by `actionAt` (tie highest `id`) decides | Pass |
 
 ### 2.2 Ticket Workflow and Resolution — `server/tests/lab-04/ticket-workflow.api.test.ts`
 
@@ -99,7 +99,7 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 | API-32 | API | AC-10 / BR-15 | `byPriority` breakdown | `low`/`medium`/`high` sub-counts each match hand-computed expected values over active Tickets only; terminal-status Tickets excluded from all three | Pass |
 | API-33 | API | FR-11 | Requester denied | Requester calling this endpoint → 403 | Pass |
 | API-34 | API | FR-11 / BR-15 | Administrator sees queue metrics plus userCounts | ADMIN receives 200 with identical queue metrics plus `userCounts` matching hand-computed active-user counts; `IT_STAFF` response omits `userCounts` entirely (D-07) | Pass |
-| API-35 | API | FR-12 / safe failure | Safe 500 shape on dashboard/actions endpoints | Forced server error → 500 with `{ error: { message, code: INTERNAL_SERVER_ERROR } }`, no stack/technical detail leaked | Planned |
+| API-35 | API | FR-12 / safe failure | Safe 500 shape on dashboard/actions endpoints | Forced server error → 500 with `{ error: { message, code: INTERNAL_SERVER_ERROR } }`, no stack/technical detail leaked | Pass |
 | API-36 | API | FR-11 / BR-15 | `userCounts` counts active users only | Inactive users excluded from all three sub-counts; verified against seeded active/inactive mix | Pass |
 | API-39 | API | BR-02 / §5 Auth matrix | Inactive Staff denied on Lab 4 endpoints | Deactivated session → `401 UNAUTHORIZED` (session invalidated by `requireSession`); fresh login → `403 ACCOUNT_INACTIVE`; no record created | Pass |
 
@@ -111,7 +111,7 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 | UNIT-02 | Unit | BR-12 | Optimistic-concurrency comparator | Matching version → proceed; mismatched → reject, no side effects | Pass |
 | UNIT-03 | Unit | BR-04 | Follow-up conditional validator | `true` + empty → fail; `true` + note → pass; `false` ± note → pass with note normalized to `null` | Pass |
 | UNIT-04 | Unit | BR-14, BR-15 | Dashboard metric query builders | Given a mocked ticket set, each metric function returns the mathematically correct count (including `userCounts` per role) | Pass |
-| UNIT-05 | Unit | BR-06 | `actionAt` validator | Future beyond +5 min → reject; within tolerance/past/now → accept; invalid ISO → reject | Planned |
+| UNIT-05 | Unit | BR-06 | `actionAt` validator | Future beyond +5 min → reject; within tolerance/past/now → accept; invalid ISO → reject | Pass |
 
 ### 2.6 UI Component Tests — `client/tests/lab-04/`
 
@@ -146,7 +146,7 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 |---|---|---|---|---|---|
 | MIG-01 | MIG | §9.5 / AC-12 | Migration preserves Lab 2/3 data | Row counts for `ticket`, `user`, `public_comment`, `internal_note`, `attachment` identical before/after migration; every existing Ticket gets `version = 1` | Pass |
 | MIG-02 | MIG | §9.6 | Seed data and idempotency | Tickets with 0 / 1 / multiple Actions Taken present (incl. one backdated `actionAt`); at least one qualifying-for-resolution Ticket; active/inactive users per role for `userCounts`; re-running seed produces no duplicates | Pass |
-| MIG-03 | MIG | AC-12 / BR-20 | Full Lab 2/3 functional regression | Authentication, Requester Ticket/Attachment lifecycle, IT Staff Queue/Ticket ops, Public Comments, Internal Notes, Administrator User Management — every Lab 3 AC re-verified and still passes | Planned |
+| MIG-03 | MIG | AC-12 / BR-20 | Full Lab 2/3 functional regression | Authentication, Requester Ticket/Attachment lifecycle, IT Staff Queue/Ticket ops, Public Comments, Internal Notes, Administrator User Management — every Lab 3 AC re-verified and still passes | Pass |
 | MIG-04 | MIG | D-03 | Pre-existing Resolved/Closed Tickets not retroactively blocked | Legacy Resolved/Closed Tickets from Lab 3 seed remain valid without a backfilled Action Taken | Pass |
 | MIG-05 | MIG | §9.5 rollback | Rollback / recovery path | Failed migration can be rolled back (`prisma migrate resolve --rolled-back`) or restored from pre-migration backup; re-run is safe with no data loss (verified by MIG-01 counts) | Pass |
 
@@ -154,7 +154,7 @@ This document applies Test-Driven Development and the Specification-Driven Devel
 
 | Test ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
-| PERF-01 | PERF | FR-12 / BR-16 | Dashboard smoke at seed scale | With seed-scale data (dozens–low hundreds of Tickets), `GET /api/dashboard/requester` and `GET /api/dashboard/staff` each respond 200 within the smoke budget (e.g. < 2s local) with no N+1 failure; asserts status + shape only, not load testing | Planned |
+| PERF-01 | PERF | FR-12 / BR-16 | Dashboard smoke at seed scale | With seed-scale data (dozens–low hundreds of Tickets), `GET /api/dashboard/requester` and `GET /api/dashboard/staff` each respond 200 within the smoke budget (e.g. < 2s local) with no N+1 failure; asserts status + shape only, not load testing | Pass |
 
 ---
 
@@ -233,13 +233,13 @@ _Filled in on the final `main` branch before submission._
 
 | Type | Total | Pass | Fail | Pending |
 |---|---|---|---|---|
-| Unit | 5 | 0 | 0 | 5 |
-| API | 39 | 0 | 0 | 39 |
-| MIG | 5 | 0 | 0 | 5 |
-| UI | 11 | 0 | 0 | 11 |
-| E2E | 6 | 0 | 0 | 6 |
-| PERF | 1 | 0 | 0 | 1 |
-| **Total** | **67** | **0** | **0** | **67** |
+| Unit | 5 | 5 | 0 | 0 |
+| API | 39 | 39 | 0 | 0 |
+| MIG | 5 | 5 | 0 | 0 |
+| UI | 11 | 11 | 0 | 0 |
+| E2E | 6 | 6 | 0 | 0 |
+| PERF | 1 | 1 | 0 | 0 |
+| **Total** | **67** | **67** | **0** | **0** |
 
 ---
 
