@@ -1,8 +1,12 @@
 import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
-  testDir: "./e2e/lab-03",
+  testDir: "./e2e",
   testMatch: "**/*.spec.ts",
+  // Lab 2 suite tests the removed localStorage requester selector and can
+  // never pass against the authenticated app (see README "End-to-end
+  // tests"), so it stays out of the default run.
+  testIgnore: "**/lab-02/**",
   timeout: 90_000,
   fullyParallel: false,
   workers: 1,

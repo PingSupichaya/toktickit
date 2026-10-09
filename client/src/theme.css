@@ -515,6 +515,144 @@ button {
 }
 
 /* ---------------------------------------------------------------------------
+   Metric cards (docs/lab-04/ui-spec.md Section 2): label on the left, count
+   and drill-down link right-aligned.
+   --------------------------------------------------------------------------- */
+.metric-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.metric-card__label {
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.metric-card__aside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+}
+
+.metric-card__value {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-text-primary);
+}
+
+button.metric-card__link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-primary);
+  cursor: pointer;
+}
+
+button.metric-card__link:hover {
+  color: var(--color-primary-hover);
+  text-decoration: underline;
+}
+
+button.metric-card__link:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+/* Requester Dashboard grids (ui-spec §9): metric cards 4 columns, content
+   row 2 columns on desktop; collapse on tablet/mobile. */
+.dashboard__cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-4);
+}
+
+/* Staff Dashboard metric grid: 6 cards in 3 columns (2 rows) on desktop,
+   2 columns on tablet, 1 column on mobile. */
+.dashboard__cards--staff {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.dashboard__row {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .dashboard__cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .dashboard__row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 767px) {
+  .dashboard__cards {
+    grid-template-columns: 1fr;
+  }
+  .dashboard__row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Requester Dashboard recent-ticket rows: spaced items with a bordered
+   ticket-number button (secondary-button treatment) linking to the detail
+   view, plus a larger "View all" for the recent list. */
+.dashboard__recent-list {
+  list-style: none;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.dashboard__recent-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+}
+
+button.dashboard__recent-number {
+  background-color: var(--color-bg-surface);
+  color: var(--color-primary);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-control);
+  padding: var(--space-1) var(--space-3);
+  min-width: 8rem;
+  text-align: center;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button.dashboard__recent-number:hover {
+  background-color: var(--color-pale-green);
+}
+
+button.dashboard__recent-number:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+button[data-testid="recent-view-all-link"] {
+  font-size: 1rem;
+}
+
+.dashboard__recent-summary {
+  color: var(--color-text-primary);
+}
+
+/* ---------------------------------------------------------------------------
    Alerts
    --------------------------------------------------------------------------- */
 .alert {
@@ -2700,6 +2838,12 @@ input[type="password"]::-ms-clear {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+}
+
+/* Lab 4 Actions Taken rows: bold inline labels ("Action:"/"Result:") so
+   Requesters can scan the work log at a glance. */
+.action-row__label {
+  font-weight: 600;
 }
 
 @media (max-width: 767px) {

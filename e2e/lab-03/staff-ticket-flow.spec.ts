@@ -117,6 +117,18 @@ async function expectShell(page: Page, name: string) {
   await expect(page.locator(".app-header__user-name")).toHaveText(name);
 }
 
+// Lab 4: successful logins land on /dashboard for every role — step through
+// the header nav before touching view-specific controls. Re-entering a view
+// remounts it (clearing its filters), so these helpers stay idempotent.
+async function gotoQueue(page: Page) {
+  await page.locator(".app-header__nav .app-header__nav-link").filter({ hasText: "Ticket Queue" }).click();
+  await expect(page.locator('[data-testid="queue-table"]')).toBeVisible();
+}
+
+async function gotoMyTickets(page: Page) {
+  await page.locator(".app-header__nav .app-header__nav-link").filter({ hasText: "My Tickets" }).click();
+}
+
 async function clearSession(page: Page) {
   await page.context().clearCookies();
   await gotoLogin(page);
@@ -133,13 +145,18 @@ async function pickFromSelect(page: Page, testId: string, label: string) {
 }
 
 // The queue table row opens the staff detail view for the given ticket.
-async function openQueueTicket(page: Page, ticketNumber: string) {
-  await page.locator(`tr[aria-label="Open ticket ${ticketNumber}"]`).click();
+async function openQueueTicket(page: Page, ticketNumber: string, search: string) {
+  await gotoQueue(page);
+  await page.locator('[data-testid="queue-search-input"]').fill(search);
+  const row = page.locator(`tr[aria-label="Open ticket ${ticketNumber}"]`);
+  await expect(row).toBeVisible({ timeout: 10000 });
+  await row.click();
   await expect(page.locator('[data-testid="operational-panel"]')).toBeVisible();
 }
 
 // Requester "My Tickets" card link (same pattern as requester-regression).
 async function openMyTicket(page: Page, summary: string) {
+  await gotoMyTickets(page);
   const card = page.locator(".ticket-card").filter({ hasText: summary }).first();
   await expect(card).toBeVisible({ timeout: 15000 });
   await card.locator(".ticket-card__link").click();
@@ -175,7 +192,7 @@ test("E2E-04 staff ticket workflow: queue → claim → priority → status → 
     "data-value",
     "IT_STAFF"
   );
-  await expect(page.locator('[data-testid="queue-table"]')).toBeVisible();
+  await gotoQueue(page);
   await shot(SHOTS_QUEUE, page, "desktop-queue.png");
 
   // Queue search (debounced) + single status filter combine.
@@ -201,7 +218,7 @@ test("E2E-04 staff ticket workflow: queue → claim → priority → status → 
   // Open the NEW, unassigned ticket.
   await page.locator('[data-testid="queue-search-input"]').fill(CLAIM_SEARCH);
   await expect(claimRow).toBeVisible({ timeout: 10000 });
-  await openQueueTicket(page, CLAIM_TICKET);
+  await openQueueTicket(page, CLAIM_TICKET, CLAIM_SEARCH);
   await expect(page.locator('[data-testid="owner-unassigned"]')).toBeVisible();
   await expect(page.locator('[data-testid="claim-btn"]')).toBeVisible();
   await shot(SHOTS_DETAIL, page, "desktop-detail-operational.png");
@@ -281,11 +298,29 @@ test("E2E-05 visibility and resolution indicator", async ({ page }) => {
   // Staff adds a Public Comment + Internal Note, then walks to RESOLVED.
   await submitLogin(page, STAFF.email, STAFF.password);
   await expectShell(page, STAFF.name);
-  await page.locator('[data-testid="queue-search-input"]').fill(FLOW_SEARCH);
-  await expect(
-    page.locator(`tr[aria-label="Open ticket ${FLOW_TICKET}"]`)
-  ).toBeVisible({ timeout: 10000 });
-  await openQueueTicket(page, FLOW_TICKET);
+  // Lab 4 gate: RESOLVED needs a qualifying Action Taken. Record one via the
+  // API (same session cookies) before the walk; the fixture removes it after.
+  const queueRes = await page.request.get(`${API}/api/tickets/queue`, {
+    params: { search: FLOW_SEARCH },
+  });
+  const queueBody = await queueRes.json();
+  const flowTicket = queueBody.data.find(
+    (t: { ticketNumber: string }) => t.ticketNumber === FLOW_TICKET
+  );
+  const actionRes = await page.request.post(
+    `${API}/api/tickets/${flowTicket.id}/actions`,
+    {
+      headers: { Origin: ORIGIN_5174 },
+      data: {
+        actionAt: new Date().toISOString(),
+        description: `${MARKER} Keyboard issue investigated.`,
+        result: "Driver fault confirmed; fix in progress.",
+        followUpRequired: false,
+      },
+    }
+  );
+  expect(actionRes.status()).toBe(201);
+  await openQueueTicket(page, FLOW_TICKET, FLOW_SEARCH);
   await page.locator('[data-testid="comment-textarea"]').fill(COMMENT_FLOW);
   await page.locator('[data-testid="post-comment-btn"]').click();
   await expect(page.locator('[data-testid="public-comments"]')).toContainText(
@@ -324,11 +359,7 @@ test("E2E-05 visibility and resolution indicator", async ({ page }) => {
   // Staff formally closes the ticket.
   await submitLogin(page, STAFF.email, STAFF.password);
   await expectShell(page, STAFF.name);
-  await page.locator('[data-testid="queue-search-input"]').fill(FLOW_SEARCH);
-  await expect(
-    page.locator(`tr[aria-label="Open ticket ${FLOW_TICKET}"]`)
-  ).toBeVisible({ timeout: 10000 });
-  await openQueueTicket(page, FLOW_TICKET);
+  await openQueueTicket(page, FLOW_TICKET, FLOW_SEARCH);
   await pickFromSelect(page, "status-select", "CLOSED");
   await saveOperational(page);
   await expect(page.locator('[data-testid="status-badge"]')).toHaveAttribute(
@@ -346,7 +377,7 @@ test("E2E-06 responsive queue and detail", async ({ page }) => {
   await gotoLogin(page);
   await submitLogin(page, STAFF.email, STAFF.password);
   await expectShell(page, STAFF.name);
-  await expect(page.locator('[data-testid="queue-table"]')).toBeVisible();
+  await gotoQueue(page);
 
   // Tablet: cards replace the table.
   await page.setViewportSize({ width: 800, height: 1000 });
@@ -399,6 +430,7 @@ test("E2E-07 authorization from the browser", async ({ page }) => {
   // …but the requester UI confines her to her own tickets.
   await submitLogin(page, REQUESTER.email, REQUESTER.password);
   await expectShell(page, REQUESTER.name);
+  await gotoMyTickets(page);
   const ownCard = page
     .locator(".ticket-card")
     .filter({ hasText: "Cannot sign in to campus email" })

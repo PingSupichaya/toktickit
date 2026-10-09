@@ -95,11 +95,28 @@ async function makeTicket(spec: TicketSpec): Promise<{ id: number; ticketNumber:
 // POST a Public Comment/Internal Note directly (through the API) is covered in
 // comments-notes.api.test.ts; makeTicket + patchTo keep this suite focused.
 
+// Lab 4 contract: PATCH requires the current `version`, and RESOLVED targets
+// additionally need a qualifying Action Taken (BR-10). The helper reads the
+// live version and, for RESOLVED, records one gate-satisfying action first so
+// these Lab 3 matrix tests keep asserting matrix behavior, not gate behavior.
 async function patchStatus(agent: request.Agent, ticketId: number, currentStatus: string) {
+  const detail = await agent.get(`/api/tickets/${ticketId}`);
+  const version = detail.body.data.version;
+  if (currentStatus === "RESOLVED") {
+    await agent
+      .post(`/api/tickets/${ticketId}/actions`)
+      .set("Origin", TRUSTED_ORIGIN)
+      .send({
+        actionAt: "2026-09-20T09:15:00.000Z",
+        description: "Matrix walk qualifying work.",
+        result: "Verified working.",
+        followUpRequired: false,
+      });
+  }
   return agent
     .patch(`/api/tickets/${ticketId}`)
     .set("Origin", TRUSTED_ORIGIN)
-    .send({ currentStatus });
+    .send({ version, currentStatus });
 }
 
 beforeAll(async () => {
@@ -137,6 +154,9 @@ afterAll(async () => {
     await deleteStoredFile(row.storedFilename).catch(() => {});
   }
 
+  // Lab 4: the matrix helper records Actions Taken on RESOLVED targets —
+  // remove them first (FK RESTRICT) so ticket cleanup never fails.
+  await prisma.actionTaken.deleteMany({ where: { ticketId: { in: createdTicketIds } } });
   await prisma.publicComment.deleteMany({ where: { ticketId: { in: createdTicketIds } } });
   await prisma.internalNote.deleteMany({ where: { ticketId: { in: createdTicketIds } } });
   if (createdAttachmentIds.length > 0) {
@@ -338,7 +358,7 @@ describe("API-25 — IT Priority lifecycle (AC-11 / BR-19)", () => {
     const patch = await staff1Agent
       .patch(`/api/tickets/${t.id}`)
       .set("Origin", TRUSTED_ORIGIN)
-      .send({ itPriority: "HIGH" });
+      .send({ version: initial.body.data.version, itPriority: "HIGH" });
     expect(patch.status).toBe(200);
     expect(patch.body.data.itPriority).toBe("HIGH");
 

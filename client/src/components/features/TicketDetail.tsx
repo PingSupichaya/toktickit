@@ -16,6 +16,7 @@ import { ErrorState } from "../ui/ErrorState.js";
 import { Modal } from "../ui/Modal.js";
 import { Textarea } from "../ui/Textarea.js";
 import { AttachmentSection } from "./AttachmentSection.js";
+import { ActionsTakenReadonlyCard } from "./ActionsTakenPanel.js";
 
 interface TicketDetailProps {
   ticketId: number;
@@ -390,6 +391,10 @@ export function TicketDetail({ ticketId, onBack }: TicketDetailProps) {
             </Button>
           </div>
         </div>
+      </Card>
+
+      <Card className="ticket-detail__card">
+        <ActionsTakenReadonlyCard ticketId={ticket.id} />
       </Card>
 
       <Card className="ticket-detail__card">

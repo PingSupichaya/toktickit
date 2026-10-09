@@ -135,6 +135,13 @@ export interface TicketDetail extends Ticket {
   notes?: PublicComment[];
   canIndicateResolved?: boolean;
   permittedStatusTransitions?: TicketStatus[];
+  // Lab 4 (§4.7): optimistic-concurrency version plus resolution-gate helpers.
+  // Optional so pre-Lab-4 fixtures keep typechecking; the server always sends
+  // them and the Lab 4 UI treats a missing version as unsavable.
+  version?: number;
+  canResolve?: boolean;
+  actionCount?: number;
+  hasOutstandingFollowUp?: boolean;
 }
 
 export interface TicketSummary {
@@ -154,7 +161,9 @@ export interface TicketQuery {
   search?: string;
   categoryId?: number;
   relatedSystemId?: number;
-  status?: string;
+  // Lab 4 drill-down (§4.5): a single status behaves as before; an array is
+  // sent as repeated `status` params matching any listed status.
+  status?: string | string[];
   priority?: RequestedPriority;
   sortBy?: "ticketDate" | "ticketNumber";
   sortOrder?: "asc" | "desc";
@@ -321,7 +330,10 @@ export async function fetchTickets(query: TicketQuery): Promise<TicketPage> {
   if (query.search) params.set("search", query.search);
   if (query.categoryId !== undefined) params.set("categoryId", String(query.categoryId));
   if (query.relatedSystemId !== undefined) params.set("relatedSystemId", String(query.relatedSystemId));
-  if (query.status) params.set("status", query.status);
+  if (query.status) {
+    const statuses = Array.isArray(query.status) ? query.status : [query.status];
+    for (const s of statuses) params.append("status", s);
+  }
   if (query.priority) params.set("priority", query.priority);
   if (query.sortBy) params.set("sortBy", query.sortBy);
   if (query.sortOrder) params.set("sortOrder", query.sortOrder);
@@ -654,6 +666,9 @@ export interface AssignOwnerResult {
 }
 
 export interface OperationalUpdateInput {
+  // Lab 4 (§4.4): the version last read; the server rejects stale writes with
+  // 409 STALE_UPDATE carrying the current Ticket for refresh-and-retry.
+  version: number;
   itPriority?: RequestedPriority;
   currentStatus?: TicketStatus;
 }
@@ -785,4 +800,152 @@ export async function resetUserInitialPassword(
     method: "POST",
     body: JSON.stringify({ newPassword }),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Lab 4 — Actions Taken (FR-01..FR-05 / api-spec §3–§4.3).
+// ---------------------------------------------------------------------------
+
+// Row shape of every Actions Taken response (api-spec §3): the work time is
+// `actionAt` (client-supplied); `createdAt` is the backend audit timestamp.
+export interface ActionTaken {
+  id: number;
+  ticketId: number;
+  actionAt: string;
+  description: string;
+  result: string;
+  followUpRequired: boolean;
+  followUpNote: string | null;
+  attachmentNotes: string | null;
+  performedBy: { id: number; name: string; role: UserRole };
+  updatedBy: { id: number; name: string; role: UserRole } | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateActionTakenInput {
+  actionAt: string;
+  description: string;
+  result: string;
+  followUpRequired: boolean;
+  followUpNote?: string | null;
+  attachmentNotes?: string | null;
+}
+
+export interface UpdateActionTakenInput {
+  version: number;
+  actionAt?: string;
+  description?: string;
+  result?: string;
+  followUpRequired?: boolean;
+  followUpNote?: string | null;
+  attachmentNotes?: string | null;
+}
+
+// FR-05 / BR-08 — list all Actions Taken for a Ticket, oldest work first.
+// The submitting Requester may read their own Ticket; staff may read any.
+export async function fetchActionsTaken(
+  ticketId: number
+): Promise<ActionTaken[]> {
+  return authJson<ActionTaken[]>(`/api/tickets/${ticketId}/actions`);
+}
+
+// FR-01 / FR-02 — create an Action Taken (IT_STAFF/ADMIN on any Ticket).
+export async function createActionTaken(
+  ticketId: number,
+  input: CreateActionTakenInput
+): Promise<ActionTaken> {
+  return authJson<ActionTaken>(`/api/tickets/${ticketId}/actions`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+// FR-03 — edit an Action Taken (optimistic concurrency: 409 STALE_UPDATE
+// carries the current record in error.details.current).
+export async function updateActionTaken(
+  ticketId: number,
+  actionId: number,
+  input: UpdateActionTakenInput
+): Promise<ActionTaken> {
+  return authJson<ActionTaken>(
+    `/api/tickets/${ticketId}/actions/${actionId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Lab 4 — Requester Dashboard (FR-10 / api-spec §4.5, BR-14).
+// ---------------------------------------------------------------------------
+
+// Metric drill-down targets (api-spec §4.5): the status groups behind each
+// Requester Dashboard card. `null` means the unfiltered My Tickets view.
+export const REQUESTER_OPEN_STATUSES = [
+  "NEW",
+  "OPEN",
+  "IN_PROGRESS",
+  "REOPENED",
+] as const;
+
+export interface RequesterDashboardMetrics {
+  myOpenTickets: number;
+  waitingOnYou: number;
+  resolved: number;
+  closed: number;
+}
+
+export interface DashboardRecentTicket {
+  id: number;
+  ticketNumber: string;
+  summary: string;
+  currentStatus: string;
+  updatedAt: string;
+}
+
+export interface RequesterDashboardData {
+  metrics: RequesterDashboardMetrics;
+  recentTickets: DashboardRecentTicket[];
+}
+
+// FR-10 — summarize only the caller's own Tickets plus the 5 most recently
+// updated ones. Zero tickets yields zeroed metrics and an empty list (AC-11).
+export async function fetchRequesterDashboard(): Promise<RequesterDashboardData> {
+  return authJson<RequesterDashboardData>("/api/dashboard/requester");
+}
+
+// ---------------------------------------------------------------------------
+// Lab 4 — IT Staff Dashboard (FR-11 / api-spec §4.6, BR-15, D-07).
+// ---------------------------------------------------------------------------
+
+export interface StaffDashboardMetrics {
+  new: number;
+  open: number;
+  inProgress: number;
+  waitingForRequester: number;
+  unassigned: number;
+  myAssigned: number;
+  byPriority: { low: number; medium: number; high: number };
+}
+
+export interface ActiveUserCounts {
+  requesters: number;
+  itStaff: number;
+  admins: number;
+}
+
+export interface StaffDashboardData {
+  metrics: StaffDashboardMetrics;
+  recentTickets: DashboardRecentTicket[];
+  // ADMIN callers only; omitted entirely for IT_STAFF (D-07).
+  userCounts?: ActiveUserCounts;
+}
+
+// FR-11 — queue-wide operational counts plus the caller's recent Tickets.
+// ADMIN responses additionally carry active-only userCounts.
+export async function fetchStaffDashboard(): Promise<StaffDashboardData> {
+  return authJson<StaffDashboardData>("/api/dashboard/staff");
 }

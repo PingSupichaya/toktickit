@@ -32,6 +32,17 @@ import {
   isStaffRole,
 } from "./statusTransitions.js";
 import { validateContent } from "./contentValidation.js";
+import {
+  ACTION_TEXT_MAX_LENGTH,
+  ACTION_TEXT_MIN_LENGTH,
+  ATTACHMENT_NOTES_MAX_LENGTH,
+  isActionAtTooFarInFuture,
+  isResolutionGateSatisfied,
+  isStaleVersion,
+  normalizeFollowUpNote,
+  parseActionAt,
+  validateBoundedText,
+} from "./actionTakenRules.js";
 import { isValidEmail, normalizeEmail } from "./email.js";
 import {
   SESSION_COOKIE_NAME,
@@ -74,15 +85,6 @@ class AlreadyIndicatedResolvedError extends Error {
 class TicketAlreadyAssignedError extends Error {
   constructor() {
     super("ticket is already assigned");
-  }
-}
-
-// Raised inside the PATCH transaction when the requested status move is not
-// permitted by the current-status matrix; mapped to 409
-// TICKET_STATUS_TRANSITION_NOT_ALLOWED (BR-43).
-class StatusTransitionNotAllowedError extends Error {
-  constructor() {
-    super("status transition is not allowed");
   }
 }
 
@@ -1196,13 +1198,23 @@ app.get(
       }
     }
 
-    let status: TicketStatus | undefined;
+    // Lab 4 drill-down (§4.5): repeated `status` params filter to any of the
+    // given statuses. A single value behaves exactly as before.
+    let statuses: TicketStatus[] | undefined;
     if (q.status !== undefined && q.status !== "") {
-      if (STATUSES.includes(q.status as TicketStatus)) {
-        status = q.status as TicketStatus;
-      } else {
-        details.status =
-          'Status must be "NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "RESOLVED", "CLOSED", "REOPENED", or "CANCELLED"';
+      const raw = Array.isArray(q.status) ? q.status : [q.status];
+      const parsed: TicketStatus[] = [];
+      for (const value of raw) {
+        if (typeof value === "string" && STATUSES.includes(value as TicketStatus)) {
+          parsed.push(value as TicketStatus);
+        } else {
+          details.status =
+            'Status must be "NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "RESOLVED", "CLOSED", "REOPENED", or "CANCELLED"';
+          break;
+        }
+      }
+      if (parsed.length > 0 && Object.keys(details).length === 0) {
+        statuses = parsed;
       }
     }
 
@@ -1228,7 +1240,7 @@ app.get(
     const where: Prisma.TicketWhereInput = { submittedById: requesterId };
     if (categoryId !== undefined) where.categoryId = categoryId;
     if (relatedSystemId !== undefined) where.relatedSystemId = relatedSystemId;
-    if (status !== undefined) where.currentStatus = status;
+    if (statuses !== undefined) where.currentStatus = { in: statuses };
     if (priority !== undefined) where.requestedPriority = priority;
 
     if (typeof q.search === "string" && q.search.trim() !== "") {
@@ -1318,6 +1330,169 @@ app.get(
 });
 
 // ---------------------------------------------------------------------------
+// Requester Dashboard (Lab 4, docs/lab-04/api-spec.md §4.5, BR-14).
+// GET /api/dashboard/requester -> 200 { data: { metrics, recentTickets } }
+// Metrics count ONLY the caller's own Tickets (submittedById = session user):
+// myOpenTickets (NEW/OPEN/IN_PROGRESS/REOPENED), waitingOnYou
+// (WAITING_FOR_REQUESTER), resolved, closed. recentTickets is the 5 most
+// recently updated owned Tickets (updatedAt desc), [] when none — never an
+// error (AC-11). Computed live per request (BR-16, FR-12).
+// ---------------------------------------------------------------------------
+app.get(
+  "/api/dashboard/requester",
+  requireRole(UserRole.REQUESTER),
+  async (req: Request, res: Response) => {
+    try {
+      const user = req.sessionUser;
+      if (!user) {
+        return res.status(401).json({
+          error: { message: "Authentication required", code: "UNAUTHORIZED" },
+        });
+      }
+
+      const db = getPrisma();
+      const own = { submittedById: user.id };
+      const [myOpenTickets, waitingOnYou, resolved, closed, recent] =
+        await Promise.all([
+          db.ticket.count({
+            where: {
+              ...own,
+              currentStatus: { in: ["NEW", "OPEN", "IN_PROGRESS", "REOPENED"] },
+            },
+          }),
+          db.ticket.count({
+            where: { ...own, currentStatus: "WAITING_FOR_REQUESTER" },
+          }),
+          db.ticket.count({ where: { ...own, currentStatus: "RESOLVED" } }),
+          db.ticket.count({ where: { ...own, currentStatus: "CLOSED" } }),
+          db.ticket.findMany({
+            where: own,
+            orderBy: { updatedAt: "desc" },
+            take: 5,
+            select: {
+              id: true,
+              ticketNumber: true,
+              summary: true,
+              currentStatus: true,
+              updatedAt: true,
+            },
+          }),
+        ]);
+
+      res.status(200).json({
+        data: {
+          metrics: { myOpenTickets, waitingOnYou, resolved, closed },
+          recentTickets: recent,
+        },
+      });
+    } catch (err) {
+      console.error("Failed to fetch requester dashboard:", err);
+      res.status(500).json({
+        error: {
+          message: "Failed to fetch requester dashboard",
+          code: "INTERNAL_SERVER_ERROR",
+        },
+      });
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// IT Staff Dashboard (Lab 4, docs/lab-04/api-spec.md §4.6, BR-15, D-07).
+// GET /api/dashboard/staff -> 200 { data: { metrics, recentTickets } }
+// Queue-wide status counts plus Unassigned / My Assigned / byPriority over
+// active (non-terminal) Tickets. recentTickets is the caller's 5 most
+// recently updated owned Tickets (updatedAt desc), [] when none (AC-10).
+// ADMIN callers additionally receive active-only `userCounts`; IT_STAFF
+// responses omit the field entirely. Computed live per request (BR-16).
+// ---------------------------------------------------------------------------
+app.get(
+  "/api/dashboard/staff",
+  requireRole(UserRole.IT_STAFF, UserRole.ADMIN),
+  async (req: Request, res: Response) => {
+    try {
+      const user = req.sessionUser;
+      if (!user) {
+        return res.status(401).json({
+          error: { message: "Authentication required", code: "UNAUTHORIZED" },
+        });
+      }
+
+      const db = getPrisma();
+      const active = {
+        currentStatus: { notIn: ["RESOLVED", "CLOSED", "CANCELLED"] as TicketStatus[] },
+      };
+      const [
+        fresh,
+        open,
+        inProgress,
+        waitingForRequester,
+        unassigned,
+        myAssigned,
+        low,
+        medium,
+        high,
+        recent,
+      ] = await Promise.all([
+        db.ticket.count({ where: { currentStatus: "NEW" } }),
+        db.ticket.count({ where: { currentStatus: "OPEN" } }),
+        db.ticket.count({ where: { currentStatus: "IN_PROGRESS" } }),
+        db.ticket.count({ where: { currentStatus: "WAITING_FOR_REQUESTER" } }),
+        db.ticket.count({ where: { ...active, ownerId: null } }),
+        db.ticket.count({ where: { ...active, ownerId: user.id } }),
+        db.ticket.count({ where: { ...active, itPriority: "LOW" } }),
+        db.ticket.count({ where: { ...active, itPriority: "MEDIUM" } }),
+        db.ticket.count({ where: { ...active, itPriority: "HIGH" } }),
+        db.ticket.findMany({
+          where: { ownerId: user.id },
+          orderBy: { updatedAt: "desc" },
+          take: 5,
+          select: {
+            id: true,
+            ticketNumber: true,
+            summary: true,
+            currentStatus: true,
+            updatedAt: true,
+          },
+        }),
+      ]);
+
+      const data: Record<string, unknown> = {
+        metrics: {
+          new: fresh,
+          open,
+          inProgress,
+          waitingForRequester,
+          unassigned,
+          myAssigned,
+          byPriority: { low, medium, high },
+        },
+        recentTickets: recent,
+      };
+
+      if (user.role === UserRole.ADMIN) {
+        const [requesters, itStaff, admins] = await Promise.all([
+          db.user.count({ where: { role: "REQUESTER", isActive: true } }),
+          db.user.count({ where: { role: "IT_STAFF", isActive: true } }),
+          db.user.count({ where: { role: "ADMIN", isActive: true } }),
+        ]);
+        data.userCounts = { requesters, itStaff, admins };
+      }
+
+      res.status(200).json({ data });
+    } catch (err) {
+      console.error("Failed to fetch staff dashboard:", err);
+      res.status(500).json({
+        error: {
+          message: "Failed to fetch staff dashboard",
+          code: "INTERNAL_SERVER_ERROR",
+        },
+      });
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
 // Eligible owners (supplementary helper for the IT Staff Owner select; the
 // documented API defines only PUT /owner, so this endpoint supplies the
 // candidate list for the ui-spec §6.3 `owner-select`). Active IT_STAFF/ADMIN
@@ -1401,7 +1576,9 @@ app.get("/api/tickets/:ticketId", async (req: Request, res: Response) => {
       });
     }
 
-    res.status(200).json({ data: toTicketDetail(ticket, user) });
+    res.status(200).json({
+      data: toTicketDetail(ticket, user, await getTicketGateInfo(ticket.id)),
+    });
   } catch (err) {
     console.error("Failed to fetch ticket:", err);
     res.status(500).json({
@@ -1414,13 +1591,18 @@ app.get("/api/tickets/:ticketId", async (req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
-// Ticket operational update (FR-17 / FR-18 / AC-11, AC-12, BR-19, BR-20)
+// Ticket operational update (Lab 4, docs/lab-04/api-spec.md §4.4; FR-17 /
+// FR-18 / AC-11, AC-12, BR-10, BR-12)
 // PATCH /api/tickets/:ticketId -> 200 { data: updated ticket }
-//   body: { itPriority?: LOW|MEDIUM|HIGH, currentStatus?: transition target }
-//   Only IT_STAFF/ADMIN. Status changes are validated against the CURRENT
-//   status read in the same transaction (BR-43); a disallowed move is 409
-//   TICKET_STATUS_TRANSITION_NOT_ALLOWED. Response mirrors §4.9 minus
-//   comments/notes for compactness.
+//   body: { version (required), itPriority?: LOW|MEDIUM|HIGH,
+//           currentStatus?: transition target }
+//   Only IT_STAFF/ADMIN. Evaluation order (api-spec §5): version match (409
+//   STALE_UPDATE) → transition-matrix legality (409
+//   TICKET_STATUS_TRANSITION_NOT_ALLOWED) → resolution gate for RESOLVED
+//   (422 RESOLUTION_NOT_ALLOWED) → commit. The write is a single conditional
+//   statement (UPDATE ... WHERE id = ? AND version = ?); version increments
+//   by exactly 1 (D-01). Response mirrors §4.9 minus comments/notes, plus the
+//   Lab 4 fields (version, canResolve, actionCount, hasOutstandingFollowUp).
 // ---------------------------------------------------------------------------
 app.patch("/api/tickets/:ticketId", async (req: Request, res: Response) => {
   try {
@@ -1448,6 +1630,13 @@ app.patch("/api/tickets/:ticketId", async (req: Request, res: Response) => {
 
     const body = req.body ?? {};
     const details: Record<string, string> = {};
+    if (
+      body.version === undefined ||
+      body.version === null ||
+      !Number.isInteger(body.version)
+    ) {
+      details.version = "Version is required and must be an integer";
+    }
     let itPriority: RequestedPriority | undefined;
     if (body.itPriority !== undefined && body.itPriority !== null) {
       if (PRIORITIES.includes(body.itPriority as RequestedPriority)) {
@@ -1487,59 +1676,84 @@ app.patch("/api/tickets/:ticketId", async (req: Request, res: Response) => {
     }
 
     const db = getPrisma();
-    try {
-      await db.$transaction(async (tx) => {
-        const current = await tx.ticket.findUniqueOrThrow({
-          where: { id: ticketId },
-          select: { currentStatus: true },
-        });
-        if (
-          nextStatus !== undefined &&
-          !canTransition(current.currentStatus, nextStatus, user.role)
-        ) {
-          throw new StatusTransitionNotAllowedError();
-        }
-        await tx.ticket.update({
-          where: { id: ticketId },
-          data: {
-            ...(itPriority !== undefined ? { itPriority } : {}),
-            ...(nextStatus !== undefined ? { currentStatus: nextStatus } : {}),
-          },
-        });
-      });
-    } catch (err) {
-      if (err instanceof StatusTransitionNotAllowedError) {
-        return res.status(409).json({
-          error: {
-            message: "This status transition is not allowed",
-            code: "TICKET_STATUS_TRANSITION_NOT_ALLOWED",
-          },
-        });
-      }
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === "P2025"
-      ) {
-        return res.status(404).json({
-          error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
-        });
-      }
-      throw err;
-    }
-
-    const updated = await db.ticket.findUnique({
+    const current = await db.ticket.findUnique({
       where: { id: ticketId },
-      include: TICKET_DETAIL_INCLUDE,
+      select: { id: true, currentStatus: true, version: true },
     });
-    if (!updated) {
+    if (!current) {
       return res.status(404).json({
         error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
       });
     }
-    const data = toTicketDetail(updated, user);
-    delete data.comments;
-    delete data.notes;
-    res.status(200).json({ data });
+
+    // (2) Version match — checked before transition legality (API-22).
+    if (isStaleVersion(body.version, current.version)) {
+      return res.status(409).json({
+        error: {
+          message:
+            "This Ticket was updated by someone else. Refresh and try again.",
+          code: "STALE_UPDATE",
+          details: {
+            current: await ticketOperationalShape(ticketId, user),
+          },
+        },
+      });
+    }
+
+    // (3) Transition-matrix legality (matrix alone; the gate follows).
+    if (
+      nextStatus !== undefined &&
+      !canTransition(current.currentStatus, nextStatus, user.role)
+    ) {
+      return res.status(409).json({
+        error: {
+          message: "This status transition is not allowed",
+          code: "TICKET_STATUS_TRANSITION_NOT_ALLOWED",
+        },
+      });
+    }
+
+    // (4) Resolution gate, only when the target is RESOLVED (BR-10).
+    if (nextStatus === "RESOLVED") {
+      const gate = await getTicketGateInfo(ticketId);
+      if (!isResolutionGateSatisfied(gate.actionCount, gate.latestFollowUpRequired)) {
+        return res.status(422).json({
+          error: {
+            message:
+              "This Ticket cannot be resolved yet — add an Action Taken with no outstanding follow-up first.",
+            code: "RESOLUTION_NOT_ALLOWED",
+            details: {},
+          },
+        });
+      }
+    }
+
+    // (5) Commit as a single conditional statement; zero affected rows means
+    // a concurrent write slipped in between the read and the write.
+    const written = await db.ticket.updateMany({
+      where: { id: ticketId, version: current.version },
+      data: {
+        ...(itPriority !== undefined ? { itPriority } : {}),
+        ...(nextStatus !== undefined ? { currentStatus: nextStatus } : {}),
+        version: current.version + 1,
+      },
+    });
+    if (written.count === 0) {
+      return res.status(409).json({
+        error: {
+          message:
+            "This Ticket was updated by someone else. Refresh and try again.",
+          code: "STALE_UPDATE",
+          details: {
+            current: await ticketOperationalShape(ticketId, user),
+          },
+        },
+      });
+    }
+
+    res.status(200).json({
+      data: await ticketOperationalShape(ticketId, user),
+    });
   } catch (err) {
     console.error("Failed to update ticket:", err);
     res.status(500).json({
@@ -1550,6 +1764,432 @@ app.patch("/api/tickets/:ticketId", async (req: Request, res: Response) => {
     });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Actions Taken (Lab 4, docs/lab-04/api-spec.md §4.1–§4.3, BR-01..BR-08)
+// POST /api/tickets/:ticketId/actions -> 201 { data: action }
+//   body: { actionAt (UTC ISO-8601, past or within +5min), description,
+//           result (1-2000 after trim), followUpRequired (boolean),
+//           followUpNote (required iff followUpRequired, else auto-cleared to
+//           null — never a 400), attachmentNotes (optional free text 0-500) }
+//   Only IT_STAFF/ADMIN on any Ticket (BR-02, not restricted to the owner);
+//   performedBy is always the session user (D-09). Missing/invalid Tickets are
+//   404 TICKET_NOT_FOUND. Future actionAt beyond tolerance is 400
+//   ACTION_AT_IN_FUTURE; all other field violations are 400 VALIDATION_ERROR.
+// ---------------------------------------------------------------------------
+app.post(
+  "/api/tickets/:ticketId/actions",
+  requireRole(UserRole.IT_STAFF, UserRole.ADMIN),
+  async (req: Request, res: Response) => {
+    try {
+      const user = req.sessionUser;
+      if (!user) {
+        return res.status(401).json({
+          error: { message: "Authentication required", code: "UNAUTHORIZED" },
+        });
+      }
+
+      const ticketId = Number(req.params.ticketId);
+      if (!Number.isInteger(ticketId) || ticketId <= 0) {
+        return res.status(404).json({
+          error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
+        });
+      }
+      const ticket = await getPrisma().ticket.findUnique({
+        where: { id: ticketId },
+        select: { id: true },
+      });
+      if (!ticket) {
+        return res.status(404).json({
+          error: { message: "Ticket not found", code: "TICKET_NOT_FOUND" },
+        });
+      }
+
+      const body = req.body ?? {};
+      const details: Record<string, string> = {};
+
+      let actionAt: Date | undefined;
+      const parsedAt = parseActionAt(body.actionAt);
+      if (!parsedAt.ok) {
+        details.actionAt = parsedAt.message;
+      } else if (isActionAtTooFarInFuture(parsedAt.date)) {
+        return res.status(400).json({
+          error: {
+            message: "Action date/time cannot be in the future",
+            code: "ACTION_AT_IN_FUTURE",
+            details: {
+              actionAt:
+                "Action date/time must not be more than 5 minutes in the future",
+            },
+          },
+        });
+      } else {
+        actionAt = parsedAt.date;
+      }
+
+      const description = validateBoundedText(
+        body.description,
+        ACTION_TEXT_MIN_LENGTH,
+        ACTION_TEXT_MAX_LENGTH
+      );
+      if (!description.ok) {
+        details.description = description.message;
+      }
+      const result = validateBoundedText(
+        body.result,
+        ACTION_TEXT_MIN_LENGTH,
+        ACTION_TEXT_MAX_LENGTH
+      );
+      if (!result.ok) {
+        details.result = result.message;
+      }
+
+      if (typeof body.followUpRequired !== "boolean") {
+        details.followUpRequired = "Follow-Up Required must be a boolean";
+      }
+      let followUpNote: string | null = null;
+      if (typeof body.followUpRequired === "boolean") {
+        const normalized = normalizeFollowUpNote(
+          body.followUpRequired,
+          body.followUpNote
+        );
+        if ("error" in normalized) {
+          details.followUpNote = "Follow-up note is required when follow-up is needed";
+        } else {
+          followUpNote = normalized.note;
+        }
+      }
+
+      let attachmentNotes: string | null = null;
+      if (body.attachmentNotes !== undefined && body.attachmentNotes !== null) {
+        if (typeof body.attachmentNotes !== "string") {
+          details.attachmentNotes = "Attachment notes must be a string";
+        } else {
+          const trimmed = body.attachmentNotes.trim();
+          if (trimmed.length > ATTACHMENT_NOTES_MAX_LENGTH) {
+            details.attachmentNotes =
+              "Attachment notes must be at most 500 characters";
+          } else {
+            attachmentNotes = trimmed === "" ? null : trimmed;
+          }
+        }
+      }
+
+      if (Object.keys(details).length > 0) {
+        return res.status(400).json({
+          error: {
+            message: "Validation failed",
+            code: "VALIDATION_ERROR",
+            details,
+          },
+        });
+      }
+
+      const created = await getPrisma().actionTaken.create({
+        data: {
+          ticketId: ticket.id,
+          actionAt: actionAt!,
+          description: description.ok ? description.value : "",
+          result: result.ok ? result.value : "",
+          followUpRequired: body.followUpRequired,
+          followUpNote,
+          attachmentNotes,
+          performedById: user.id,
+        },
+        include: ACTION_TAKEN_INCLUDE,
+      });
+
+      res.status(201).json({ data: toActionTakenShape(created) });
+    } catch (err) {
+      console.error("Failed to create action taken:", err);
+      res.status(500).json({
+        error: {
+          message: "Failed to create action taken",
+          code: "INTERNAL_SERVER_ERROR",
+        },
+      });
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// GET /api/tickets/:ticketId/actions -> 200 { data: [action, ...] }
+// Ordered oldest work first (actionAt asc, id asc — BR-08); `{ data: [] }`
+// when the Ticket has no Actions Taken. The submitting Requester may read
+// their own Ticket; cross-owner Requester access is 404 (no existence leak,
+// same D-03 policy as comments).
+// ---------------------------------------------------------------------------
+app.get(
+  "/api/tickets/:ticketId/actions",
+  async (req: Request, res: Response) => {
+    try {
+      const user = req.sessionUser;
+      if (!user) {
+        return res.status(401).json({
+          error: { message: "Authentication required", code: "UNAUTHORIZED" },
+        });
+      }
+
+      const access = await resolveTicketAccess(req, res, user, {
+        allowStaff: true,
+      });
+      if (!access) return;
+
+      const actions = await getPrisma().actionTaken.findMany({
+        where: { ticketId: access.ticketId },
+        orderBy: [{ actionAt: "asc" }, { id: "asc" }],
+        include: ACTION_TAKEN_INCLUDE,
+      });
+
+      res.status(200).json({ data: actions.map(toActionTakenShape) });
+    } catch (err) {
+      console.error("Failed to fetch actions taken:", err);
+      res.status(500).json({
+        error: {
+          message: "Failed to fetch actions taken",
+          code: "INTERNAL_SERVER_ERROR",
+        },
+      });
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// PATCH /api/tickets/:ticketId/actions/:actionId -> 200 { data: action }
+// Edit an Action Taken (optimistic-concurrency protected). Only
+// IT_STAFF/ADMIN — any Staff member, not only the original author (BR-02,
+// BR-07). `version` is required and must equal the stored version, otherwise
+// 409 STALE_UPDATE carrying the current record so the client can refresh and
+// retry (BR-12). Field validation mirrors §4.1 for supplied fields; an edit
+// setting `followUpRequired: false` auto-clears the note (BR-04). Success
+// increments `version` by 1, sets `updatedBy` to the editor, and never changes
+// `performedBy` or `createdAt`.
+// Check order: 400 field/version-shape problems first, then 409 staleness.
+// ---------------------------------------------------------------------------
+app.patch(
+  "/api/tickets/:ticketId/actions/:actionId",
+  requireRole(UserRole.IT_STAFF, UserRole.ADMIN),
+  async (req: Request, res: Response) => {
+    try {
+      const user = req.sessionUser;
+      if (!user) {
+        return res.status(401).json({
+          error: { message: "Authentication required", code: "UNAUTHORIZED" },
+        });
+      }
+
+      const ticketId = Number(req.params.ticketId);
+      const actionId = Number(req.params.actionId);
+      if (
+        !Number.isInteger(ticketId) ||
+        ticketId <= 0 ||
+        !Number.isInteger(actionId) ||
+        actionId <= 0
+      ) {
+        return res.status(404).json({
+          error: { message: "Action Taken not found", code: "NOT_FOUND" },
+        });
+      }
+
+      const current = await getPrisma().actionTaken.findUnique({
+        where: { id: actionId },
+        include: ACTION_TAKEN_INCLUDE,
+      });
+      if (!current || current.ticketId !== ticketId) {
+        return res.status(404).json({
+          error: { message: "Action Taken not found", code: "NOT_FOUND" },
+        });
+      }
+
+      const body = req.body ?? {};
+      const details: Record<string, string> = {};
+
+      if (
+        body.version === undefined ||
+        body.version === null ||
+        !Number.isInteger(body.version)
+      ) {
+        details.version = "Version is required and must be an integer";
+      }
+
+      const EDITABLE = [
+        "actionAt",
+        "description",
+        "result",
+        "followUpRequired",
+        "followUpNote",
+        "attachmentNotes",
+      ] as const;
+      const supplied = EDITABLE.filter((f) => body[f] !== undefined);
+      if (supplied.length === 0) {
+        details.body = "At least one editable field must be provided";
+      }
+
+      let actionAt: Date | undefined;
+      if (body.actionAt !== undefined) {
+        const parsedAt = parseActionAt(body.actionAt);
+        if (!parsedAt.ok) {
+          details.actionAt = parsedAt.message;
+        } else if (isActionAtTooFarInFuture(parsedAt.date)) {
+          return res.status(400).json({
+            error: {
+              message: "Action date/time cannot be in the future",
+              code: "ACTION_AT_IN_FUTURE",
+              details: {
+                actionAt:
+                  "Action date/time must not be more than 5 minutes in the future",
+              },
+            },
+          });
+        } else {
+          actionAt = parsedAt.date;
+        }
+      }
+
+      let description: string | undefined;
+      if (body.description !== undefined) {
+        const validated = validateBoundedText(
+          body.description,
+          ACTION_TEXT_MIN_LENGTH,
+          ACTION_TEXT_MAX_LENGTH
+        );
+        if (!validated.ok) details.description = validated.message;
+        else description = validated.value;
+      }
+
+      let result: string | undefined;
+      if (body.result !== undefined) {
+        const validated = validateBoundedText(
+          body.result,
+          ACTION_TEXT_MIN_LENGTH,
+          ACTION_TEXT_MAX_LENGTH
+        );
+        if (!validated.ok) details.result = validated.message;
+        else result = validated.value;
+      }
+
+      let followUpRequired: boolean | undefined;
+      if (body.followUpRequired !== undefined) {
+        if (typeof body.followUpRequired !== "boolean") {
+          details.followUpRequired = "Follow-Up Required must be a boolean";
+        } else {
+          followUpRequired = body.followUpRequired;
+        }
+      }
+      // Effective flag after this edit (explicit value wins, otherwise the
+      // stored one). The note rule is evaluated against it.
+      const effectiveFollowUp =
+        followUpRequired ?? current.followUpRequired;
+      let followUpNote: string | null | undefined;
+      if (!effectiveFollowUp) {
+        followUpNote = null; // BR-04 auto-clear, even for a stale supplied note
+      } else if (body.followUpNote !== undefined) {
+        const normalized = normalizeFollowUpNote(true, body.followUpNote);
+        if ("error" in normalized) {
+          details.followUpNote =
+            "Follow-up note is required when follow-up is needed";
+        } else {
+          followUpNote = normalized.note;
+        }
+      } else if (
+        !current.followUpRequired ||
+        current.followUpNote == null
+      ) {
+        // Flipping false → true (or true with no stored note) without
+        // supplying a note leaves the record note-less: reject (API-13).
+        details.followUpNote =
+          "Follow-up note is required when follow-up is needed";
+      }
+
+      let attachmentNotes: string | null | undefined;
+      if (body.attachmentNotes !== undefined) {
+        if (
+          body.attachmentNotes !== null &&
+          typeof body.attachmentNotes !== "string"
+        ) {
+          details.attachmentNotes = "Attachment notes must be a string";
+        } else if (typeof body.attachmentNotes === "string") {
+          const trimmed = body.attachmentNotes.trim();
+          if (trimmed.length > ATTACHMENT_NOTES_MAX_LENGTH) {
+            details.attachmentNotes =
+              "Attachment notes must be at most 500 characters";
+          } else {
+            attachmentNotes = trimmed === "" ? null : trimmed;
+          }
+        } else {
+          attachmentNotes = null;
+        }
+      }
+
+      if (Object.keys(details).length > 0) {
+        return res.status(400).json({
+          error: {
+            message: "Validation failed",
+            code: "VALIDATION_ERROR",
+            details,
+          },
+        });
+      }
+
+      if (isStaleVersion(body.version, current.version)) {
+        return res.status(409).json({
+          error: {
+            message:
+              "This Action Taken was updated by someone else. Refresh and try again.",
+            code: "STALE_UPDATE",
+            details: { current: toActionTakenShape(current) },
+          },
+        });
+      }
+
+      // Conditional single-statement write: zero affected rows means a
+      // concurrent edit slipped in between the read and the write.
+      const updated = await getPrisma().actionTaken.updateMany({
+        where: { id: current.id, version: current.version },
+        data: {
+          ...(actionAt !== undefined ? { actionAt } : {}),
+          ...(description !== undefined ? { description } : {}),
+          ...(result !== undefined ? { result } : {}),
+          ...(followUpRequired !== undefined ? { followUpRequired } : {}),
+          ...(followUpNote !== undefined ? { followUpNote } : {}),
+          ...(attachmentNotes !== undefined ? { attachmentNotes } : {}),
+          updatedById: user.id,
+          version: current.version + 1,
+        },
+      });
+      if (updated.count === 0) {
+        const fresh = await getPrisma().actionTaken.findUnique({
+          where: { id: current.id },
+          include: ACTION_TAKEN_INCLUDE,
+        });
+        return res.status(409).json({
+          error: {
+            message:
+              "This Action Taken was updated by someone else. Refresh and try again.",
+            code: "STALE_UPDATE",
+            details: {
+              current: fresh ? toActionTakenShape(fresh) : null,
+            },
+          },
+        });
+      }
+
+      const refreshed = await getPrisma().actionTaken.findUnique({
+        where: { id: current.id },
+        include: ACTION_TAKEN_INCLUDE,
+      });
+      res.status(200).json({ data: toActionTakenShape(refreshed!) });
+    } catch (err) {
+      console.error("Failed to update action taken:", err);
+      res.status(500).json({
+        error: {
+          message: "Failed to update action taken",
+          code: "INTERNAL_SERVER_ERROR",
+        },
+      });
+    }
+  }
+);
 
 // ---------------------------------------------------------------------------
 // Claim an unassigned Ticket (FR-16 / AC-09 / BR-18)
@@ -2551,6 +3191,58 @@ function toCommentShape(comment: {
   };
 }
 
+// ActionTaken row shape shared by the Lab 4 actions endpoints
+// (docs/lab-04/api-spec.md §3): work time from `actionAt` (client-supplied),
+// audit time in `createdAt` (backend-set), actor in `performedBy`.
+const ACTION_TAKEN_INCLUDE = {
+  performedBy: { select: { id: true, name: true, role: true } },
+  updatedBy: { select: { id: true, name: true, role: true } },
+};
+
+// Serializes an ActionTaken row for API responses (api-spec §3). Never accepts
+// `performedBy` from the client — it is always the session user (D-09).
+function toActionTakenShape(action: {
+  id: number;
+  ticketId: number;
+  actionAt: Date;
+  description: string;
+  result: string;
+  followUpRequired: boolean;
+  followUpNote: string | null;
+  attachmentNotes: string | null;
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
+  performedBy: { id: number; name: string; role: UserRole };
+  updatedBy: { id: number; name: string; role: UserRole } | null;
+}) {
+  return {
+    id: action.id,
+    ticketId: action.ticketId,
+    actionAt: action.actionAt,
+    description: action.description,
+    result: action.result,
+    followUpRequired: action.followUpRequired,
+    followUpNote: action.followUpNote,
+    attachmentNotes: action.attachmentNotes,
+    performedBy: {
+      id: action.performedBy.id,
+      name: action.performedBy.name,
+      role: action.performedBy.role,
+    },
+    updatedBy: action.updatedBy
+      ? {
+          id: action.updatedBy.id,
+          name: action.updatedBy.name,
+          role: action.updatedBy.role,
+        }
+      : null,
+    version: action.version,
+    createdAt: action.createdAt,
+    updatedAt: action.updatedAt,
+  };
+}
+
 // Ticket detail row shape shared by GET and PATCH (api-spec §4.9/§4.10).
 const TICKET_DETAIL_INCLUDE = {
   submitter: { select: { id: true, name: true, email: true } },
@@ -2587,13 +3279,18 @@ type TicketDetailRow = Prisma.TicketGetPayload<{
 // Viewer-aware detail serializer: Internal Notes are present only for
 // IT_STAFF/ADMIN; canIndicateResolved only for the submitting Requester;
 // permittedStatusTransitions derives from the transition matrix (§5.3).
+// Lab 4 fields (api-spec §3): `version`, `actionCount`,
+// `hasOutstandingFollowUp`, and `canResolve` (gate satisfied per BR-10,
+// independent of whether RESOLVED is currently a legal transition).
 function toTicketDetail(
   ticket: TicketDetailRow,
-  viewer: { id: number; role: UserRole }
+  viewer: { id: number; role: UserRole },
+  gate: { actionCount: number; latestFollowUpRequired: boolean | null }
 ): Record<string, unknown> {
   const isStaff = isStaffRole(viewer.role);
   const data: Record<string, unknown> = {
     ...ticket,
+    version: ticket.version,
     canIndicateResolved:
       viewer.role === UserRole.REQUESTER &&
       ticket.submittedById === viewer.id &&
@@ -2603,6 +3300,13 @@ function toTicketDetail(
       ticket.currentStatus,
       viewer.role
     ),
+    actionCount: gate.actionCount,
+    hasOutstandingFollowUp:
+      gate.actionCount > 0 && gate.latestFollowUpRequired === true,
+    canResolve: isResolutionGateSatisfied(
+      gate.actionCount,
+      gate.latestFollowUpRequired
+    ),
     comments: ticket.publicComments.map(toCommentShape),
   };
   delete data.publicComments;
@@ -2611,6 +3315,45 @@ function toTicketDetail(
     data.notes = ticket.internalNotes.map(toCommentShape);
   }
   delete data.internalNotes;
+  return data;
+}
+
+// BR-10 gate inputs for one Ticket: total Actions Taken plus the
+// follow-up flag of the latest entry by (actionAt, id) — the only entry the
+// resolution gate looks at.
+async function getTicketGateInfo(ticketId: number): Promise<{
+  actionCount: number;
+  latestFollowUpRequired: boolean | null;
+}> {
+  const db = getPrisma();
+  const [actionCount, latest] = await Promise.all([
+    db.actionTaken.count({ where: { ticketId } }),
+    db.actionTaken.findFirst({
+      where: { ticketId },
+      orderBy: [{ actionAt: "desc" }, { id: "desc" }],
+      select: { followUpRequired: true },
+    }),
+  ]);
+  return {
+    actionCount,
+    latestFollowUpRequired: latest ? latest.followUpRequired : null,
+  };
+}
+
+// Compact Ticket shape for PATCH responses and 409 STALE_UPDATE details:
+// full detail minus comments/notes, plus the Lab 4 gate fields (§4.4).
+async function ticketOperationalShape(
+  ticketId: number,
+  viewer: { id: number; role: UserRole }
+): Promise<Record<string, unknown> | null> {
+  const ticket = await getPrisma().ticket.findUnique({
+    where: { id: ticketId },
+    include: TICKET_DETAIL_INCLUDE,
+  });
+  if (!ticket) return null;
+  const data = toTicketDetail(ticket, viewer, await getTicketGateInfo(ticketId));
+  delete data.comments;
+  delete data.notes;
   return data;
 }
 

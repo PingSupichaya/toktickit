@@ -9,6 +9,9 @@ import {
 interface Option<T> {
   value: T;
   label: string;
+  // Lab 4 (ui-spec §7, §10): shown but not selectable; announced via
+  // aria-disabled on the option (the resolution gate keeps RESOLVED visible).
+  disabled?: boolean;
 }
 
 interface SelectProps<T extends string | number> {
@@ -24,6 +27,8 @@ interface SelectProps<T extends string | number> {
   id?: string;
   "data-testid"?: string;
   errorTestId?: string;
+  // Associates hint text (e.g. the resolution-gate hint) with the trigger.
+  describedBy?: string;
 }
 
 export function Select<T extends string | number>({
@@ -39,6 +44,7 @@ export function Select<T extends string | number>({
   id,
   "data-testid": testId,
   errorTestId,
+  describedBy,
 }: SelectProps<T>) {
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(-1);
@@ -97,7 +103,11 @@ export function Select<T extends string | number>({
       case "Enter":
       case " ":
         e.preventDefault();
-        if (highlight >= 0 && highlight < options.length) {
+        if (
+          highlight >= 0 &&
+          highlight < options.length &&
+          !options[highlight].disabled
+        ) {
           onChange(options[highlight].value);
           setOpen(false);
         }
@@ -142,6 +152,7 @@ export function Select<T extends string | number>({
           aria-invalid={error ? true : undefined}
           aria-haspopup="listbox"
           aria-expanded={open}
+          aria-describedby={describedBy}
           disabled={disabled}
           onClick={() => {
             setOpen((o) => !o);
@@ -173,13 +184,21 @@ export function Select<T extends string | number>({
             {options.map((opt, i) => {
               const isSelected = opt.value === value;
               return (
-                <li key={String(opt.value)} role="option" aria-selected={isSelected}>
+                <li
+                  key={String(opt.value)}
+                  role="option"
+                  aria-selected={isSelected}
+                  aria-disabled={opt.disabled || undefined}
+                >
                   <button
                     type="button"
                     className={`select-control__item${
                       isSelected ? " select-control__item--selected" : ""
                     }${i === highlight ? " select-control__item--highlight" : ""}`}
+                    disabled={opt.disabled}
+                    aria-disabled={opt.disabled || undefined}
                     onClick={() => {
+                      if (opt.disabled) return;
                       onChange(opt.value);
                       setOpen(false);
                     }}

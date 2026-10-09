@@ -87,7 +87,8 @@ async function openCreateTicket() {
       "Alice Johnson"
     );
   });
-  await user.click(screen.getByTestId("create-ticket-btn"));
+  // Lab 4: Requesters land on the Dashboard — navigate via the header link.
+  await user.click(screen.getByRole("button", { name: "Create Ticket" }));
   await waitFor(() => {
     expect(screen.getByTestId("submit-btn")).toBeInTheDocument();
   });

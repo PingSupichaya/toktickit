@@ -56,35 +56,56 @@ describe("Seed data (T-022)", () => {
     expect(inactiveCount).toBeGreaterThanOrEqual(1);
   });
 
+  // NOTE: sibling suites (e.g. staff-queue) insert their own reference
+  // fixtures into this same shared database and run in parallel workers, so
+  // the full list may legitimately contain extra rows while this test runs.
+  // Both assertions below therefore filter to the seed names and check those
+  // are present, correct, and in id order — rather than exact-matching the
+  // whole table.
   it("GET /api/categories returns only active categories in id order", async () => {
     const agent = await loginAgent(app, EMAIL);
     const res = await agent.get("/api/categories");
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({
-      data: [
-        { id: 1, name: "Account and Access" },
-        { id: 2, name: "Hardware" },
-        { id: 3, name: "Software" },
-        { id: 4, name: "Network" },
-      ],
-    });
+    const seedNames = [
+      "Account and Access",
+      "Hardware",
+      "Software",
+      "Network",
+    ];
+    expect(
+      res.body.data.filter((r: { name: string }) => seedNames.includes(r.name))
+    ).toEqual([
+      { id: 1, name: "Account and Access" },
+      { id: 2, name: "Hardware" },
+      { id: 3, name: "Software" },
+      { id: 4, name: "Network" },
+    ]);
   });
 
   it("GET /api/related-systems returns only active related systems in id order", async () => {
     const agent = await loginAgent(app, EMAIL);
     const res = await agent.get("/api/related-systems");
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({
-      data: [
-        { id: 1, name: "Email" },
-        { id: 2, name: "Campus Wi-Fi" },
-        { id: 3, name: "VPN" },
-        { id: 4, name: "LEB2 App" },
-        { id: 5, name: "Grade Submission App" },
-        { id: 6, name: "Printer" },
-        { id: 7, name: "Corporate Laptop" },
-      ],
-    });
+    const seedNames = [
+      "Email",
+      "Campus Wi-Fi",
+      "VPN",
+      "LEB2 App",
+      "Grade Submission App",
+      "Printer",
+      "Corporate Laptop",
+    ];
+    expect(
+      res.body.data.filter((r: { name: string }) => seedNames.includes(r.name))
+    ).toEqual([
+      { id: 1, name: "Email" },
+      { id: 2, name: "Campus Wi-Fi" },
+      { id: 3, name: "VPN" },
+      { id: 4, name: "LEB2 App" },
+      { id: 5, name: "Grade Submission App" },
+      { id: 6, name: "Printer" },
+      { id: 7, name: "Corporate Laptop" },
+    ]);
   });
 
   // Idempotency is asserted with name-scoped counts on the reference tables

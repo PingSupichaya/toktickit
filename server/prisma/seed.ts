@@ -2,7 +2,10 @@ import bcrypt from "bcryptjs";
 import { getPrisma } from "../src/prisma.js";
 
 // ---------------------------------------------------------------------------
-// Lab 3 seed (specification.md §7.5)
+// Lab 3 seed (docs/lab-03/specification.md §7.5), extended by Lab 4
+// (docs/lab-04/specification.md §9.6: ActionTaken work log, zero-activity
+// users, active/inactive mix for userCounts). Lab 3 rows are preserved;
+// Lab 4 only adds.
 // ---------------------------------------------------------------------------
 // Seeded accounts use one of two documented development passwords:
 //
@@ -57,6 +60,12 @@ const seedUsers: SeedUser[] = [
   // Omar is a ready-to-use demo account (mustChangePassword = false).
   { name: "Omar Farouk",    email: "omar.far@mail.kmutt.ac.th",     role: "ADMIN",     isActive: true, mustChangePassword: false },
   { name: "Priya Nair",     email: "priya.nai@mail.kmutt.ac.th",    role: "ADMIN",     isActive: true  },
+  // Lab 4 §9.6 — zero-activity + active/inactive mix for dashboard empty
+  // states (AC-10/AC-11) and userCounts (API-36). These users own/submit no
+  // tickets so their dashboards exercise the zero/empty paths.
+  { name: "Zero Req",       email: "zero.req@mail.kmutt.ac.th",     role: "REQUESTER", isActive: true  },
+  { name: "Zero Staff",     email: "zero.sta@mail.kmutt.ac.th",     role: "IT_STAFF",  isActive: true  },
+  { name: "Quinn Idle",     email: "quinn.idl@mail.kmutt.ac.th",    role: "ADMIN",     isActive: false },
 ];
 
 type SeedTicket = {
@@ -410,6 +419,80 @@ const seedInternalNotes: SeedComment[] = [
   },
 ];
 
+type SeedActionTaken = {
+  ticketNumber: string;
+  performedByEmail: string;
+  actionAt: string;
+  description: string;
+  result: string;
+  followUpRequired: boolean;
+  followUpNote?: string | null;
+  attachmentNotes?: string | null;
+};
+
+const seedActionsTaken: SeedActionTaken[] = [
+  {
+    // TKT-000002 — exactly one qualifying action, authored by a non-owner
+    // (Hannah acts on Frank's ticket, BR-02). Backdated work log.
+    ticketNumber: "TKT-000002",
+    performedByEmail: "hannah.kim@mail.kmutt.ac.th",
+    actionAt: "2026-09-02T11:00:00.000Z",
+    description: "Reseated the RAM and reran the onboard diagnostics.",
+    result: "Diagnostics passed; battery drain no longer reproducible on test bench.",
+    followUpRequired: false,
+    attachmentNotes: "See diagnostic_log_2.pdf on the shared drive.",
+  },
+  {
+    // TKT-000003 — first of two; follow-up was needed at this point.
+    ticketNumber: "TKT-000003",
+    performedByEmail: "grace.pat@mail.kmutt.ac.th",
+    actionAt: "2026-09-04T10:00:00.000Z",
+    description: "Inspected access point AP-2049 in lecture hall B.",
+    result: "Found a failing antenna port; replacement hardware requested.",
+    followUpRequired: true,
+    followUpNote: "Revisit after the replacement antenna arrives.",
+  },
+  {
+    // TKT-000003 — latest action still needs follow-up → gate-blocked (BR-10).
+    ticketNumber: "TKT-000003",
+    performedByEmail: "frank.ngu@mail.kmutt.ac.th",
+    actionAt: "2026-09-05T09:30:00.000Z",
+    description: "Installed a temporary access point while awaiting parts.",
+    result: "Coverage restored partially; permanent fix still pending vendor delivery.",
+    followUpRequired: true,
+    followUpNote: "Swap in the permanent antenna once delivered.",
+  },
+  {
+    // TKT-000011 — earlier action with outstanding follow-up …
+    ticketNumber: "TKT-000011",
+    performedByEmail: "priya.nai@mail.kmutt.ac.th",
+    actionAt: "2026-09-11T10:00:00.000Z",
+    description: "Traced notification latency to the push service queue.",
+    result: "Queue depth confirmed abnormal; backend team engaged.",
+    followUpRequired: true,
+    followUpNote: "Confirm queue drains after the backend deploy.",
+  },
+  {
+    // … followed by a later action with no follow-up → gate-passed (API-17).
+    ticketNumber: "TKT-000011",
+    performedByEmail: "grace.pat@mail.kmutt.ac.th",
+    actionAt: "2026-09-11T16:00:00.000Z",
+    description: "Verified push delivery after the backend deploy.",
+    result: "Notifications arriving within seconds across test devices.",
+    followUpRequired: false,
+    attachmentNotes: "See push_test_results.csv on the shared drive.",
+  },
+  {
+    // TKT-000014 — RESOLVED ticket with a qualifying action (gate satisfied).
+    ticketNumber: "TKT-000014",
+    performedByEmail: "frank.ngu@mail.kmutt.ac.th",
+    actionAt: "2026-09-14T12:30:00.000Z",
+    description: "Reinstalled the VPN client and refreshed the profile.",
+    result: "File access over VPN back to normal speed on retest.",
+    followUpRequired: false,
+  },
+];
+
 async function main() {
   // Categories (unchanged from Lab 2)
   const categories = [
@@ -557,6 +640,39 @@ async function main() {
     }
   }
 
+  // Lab 4 Actions Taken (§9.6) — inserted only when the (ticket, description)
+  // natural key is absent so re-runs never duplicate (idempotent).
+  // Coverage:
+  //   TKT-000001/000005/000006 … zero actions (000005 RESOLVED + 000006 CLOSED
+  //     are the D-03 legacy exception — MIG-04, never backfilled);
+  //   TKT-000002 … exactly one qualifying action (non-owner author, BR-02);
+  //   TKT-000003 … multiple, latest followUpRequired = true (gate-blocked);
+  //   TKT-000011 … multiple, earliest true → latest false (gate-passed);
+  //   TKT-000014 … RESOLVED with one qualifying action (gate satisfied).
+  // All actionAt values are fixed past timestamps (< now), including one
+  // backdated entry, to exercise actionAt ordering (BR-08).
+  for (const a of seedActionsTaken) {
+    const ticketId = ticketByNumber.get(a.ticketNumber)!;
+    const performedById = userByEmail.get(a.performedByEmail)!;
+    const existing = await prisma.actionTaken.count({
+      where: { ticketId, description: a.description },
+    });
+    if (existing === 0) {
+      await prisma.actionTaken.create({
+        data: {
+          ticketId,
+          actionAt: new Date(a.actionAt),
+          description: a.description,
+          result: a.result,
+          followUpRequired: a.followUpRequired,
+          followUpNote: a.followUpNote ?? null,
+          attachmentNotes: a.attachmentNotes ?? null,
+          performedById,
+        },
+      });
+    }
+  }
+
   await report();
 }
 
@@ -580,6 +696,7 @@ async function report() {
   console.log(`Seeded ${(await prisma.ticket.count())} tickets.`);
   console.log(`Seeded ${(await prisma.publicComment.count())} public comment(s).`);
   console.log(`Seeded ${(await prisma.internalNote.count())} internal note(s).`);
+  console.log(`Seeded ${(await prisma.actionTaken.count())} action(s) taken.`);
 }
 
 main()

@@ -82,11 +82,22 @@ function toSort(querySort: string): { sortBy: "ticketDate" | "ticketNumber"; sor
 interface MyTicketsProps {
   onCreateTicket: () => void;
   onOpenTicket?: (ticket: TicketSummary) => void;
+  // Dashboard drill-down preset (ui-spec §5): status groups applied on
+  // arrival. A single status flows through the normal Status select; a group
+  // locks the list to those statuses behind a removable chip.
+  initialStatuses?: string[];
 }
 
-export function MyTickets({ onCreateTicket, onOpenTicket }: MyTicketsProps) {
+export function MyTickets({
+  onCreateTicket,
+  onOpenTicket,
+  initialStatuses,
+}: MyTicketsProps) {
   const { requester } = useRequester();
   const [filters, setFilters] = useState<ToolbarState>(() => applyFilters({}));
+  const [lockedStatuses, setLockedStatuses] = useState<string[] | null>(() =>
+    initialStatuses && initialStatuses.length > 0 ? initialStatuses : null
+  );
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -129,6 +140,10 @@ export function MyTickets({ onCreateTicket, onOpenTicket }: MyTicketsProps) {
     };
   }, []);
 
+  // A locked dashboard group wins over the single Status select; manual
+  // selection stays a plain string so existing query assertions hold.
+  const effectiveStatuses = lockedStatuses ?? (filters.status || undefined);
+
   // Refetch whenever debounced search, filters, page, or page size change.
   useEffect(() => {
     if (!requester) return;
@@ -142,7 +157,7 @@ export function MyTickets({ onCreateTicket, onOpenTicket }: MyTicketsProps) {
       categoryId: filters.categoryId === "" ? undefined : Number(filters.categoryId),
       relatedSystemId:
         filters.relatedSystemId === "" ? undefined : Number(filters.relatedSystemId),
-      status: filters.status || undefined,
+      status: effectiveStatuses,
       priority: filters.priority || undefined,
       sortBy,
       sortOrder,
@@ -168,7 +183,7 @@ export function MyTickets({ onCreateTicket, onOpenTicket }: MyTicketsProps) {
     debouncedSearch,
     filters.categoryId,
     filters.relatedSystemId,
-    filters.status,
+    effectiveStatuses,
     filters.priority,
     filters.sort,
     page,
@@ -176,14 +191,20 @@ export function MyTickets({ onCreateTicket, onOpenTicket }: MyTicketsProps) {
     requester,
   ]);
 
-  const isFiltering = useMemo(() => anyFilterActive(filters), [filters]);
+  const isFiltering = useMemo(
+    () => anyFilterActive(filters) || lockedStatuses !== null,
+    [filters, lockedStatuses]
+  );
 
   function clearFilters() {
     setFilters(applyFilters({}));
+    setLockedStatuses(null);
     setPage(1);
   }
 
   function updateFilter(patch: Partial<ToolbarState>) {
+    // Manual filtering takes over from a dashboard preset.
+    if (patch.status !== undefined) setLockedStatuses(null);
     setFilters((prev) => ({ ...prev, ...patch }));
     setPage(1);
   }
@@ -264,6 +285,23 @@ export function MyTickets({ onCreateTicket, onOpenTicket }: MyTicketsProps) {
           </Button>
         )}
       </div>
+
+      {lockedStatuses !== null && (
+        <p className="my-tickets__preset" data-testid="dashboard-filter-chip">
+          Status filter from dashboard: {lockedStatuses.join(", ")}{" "}
+          <button
+            type="button"
+            className="metric-card__link"
+            data-testid="dashboard-filter-clear"
+            onClick={() => {
+              setLockedStatuses(null);
+              setPage(1);
+            }}
+          >
+            Clear
+          </button>
+        </p>
+      )}
 
       <p className="my-tickets__count" data-testid="ticket-count">
         Showing {pagination.totalCount === 0 ? 0 : (pagination.page - 1) * pagination.pageSize + 1}–
