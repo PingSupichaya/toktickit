@@ -102,7 +102,7 @@ The Lab 3 and Lab 4 E2E suites drive the full multi-role workflow in a real (hea
 **Run the E2E tests** (from the repository root):
 
 ```bash
-# Full suite, all labs (serial, one worker)
+# Full suite, lab-03 + lab-04 (serial, one worker; lab-02 is excluded, see note)
 npx playwright test
 
 # Lab 4 only
@@ -126,9 +126,9 @@ The same commands are also available as npm scripts from the repo root: `npm run
 - `e2e/lab-03/requester-regression.spec.ts` — E2E-11: authenticated requester creates a ticket, manages an attachment, posts a comment (Lab 2 selector is gone).
 - `e2e/lab-04/actions-taken-flow.spec.ts` — E2E-01: staff adds + edits an Action Taken (backdated/picker/future-blocked), list in `actionAt` order; E2E-05: requester sees the read-only list with zero write controls.
 - `e2e/lab-04/ticket-resolution.spec.ts` — E2E-02: resolution gate blocks, then resolves once qualified; E2E-03: concurrent edit shows the conflict banner without overwriting.
-- `e2e/lab-04/dashboards.spec.ts` — E2E-04/06 skeleton (dashboard drill-down + responsive evidence land with the dashboard UI issues, not this task).
+- `e2e/lab-04/dashboards.spec.ts` — E2E-04: requester/staff/admin dashboards with drill-down (admin-only user strip); E2E-06: responsive grids, no overflow at 375px, visible focus, AA contrast, Zen Green token check.
 
-After running, confirm the screenshots were written to `artifacts/lab-03/screenshots/` (`authentication/`, `staff-queue/`, `staff-ticket-detail/`, `user-management/`) and `artifacts/lab-04/screenshots/actions-taken/`.
+After running, confirm the screenshots were written to `artifacts/lab-03/screenshots/` (`authentication/`, `staff-queue/`, `staff-ticket-detail/`, `user-management/`) and `artifacts/lab-04/screenshots/` (`staff-dashboard/`, `requester-dashboard/`, `actions-taken/`).
 
 > Note: `e2e/lab-02/` is the legacy Lab 2 suite (localStorage requester selector, 403 ownership block). It is not run by `npx playwright test` and does not pass against the current app (authenticated identity, 404 cross-owner rule); requester regression now lives in E2E-11.
 
